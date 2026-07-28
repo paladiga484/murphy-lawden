@@ -1,2 +1,4 @@
-# murphy-lawden
-murphy lawden is the guy you call when everything that couldve gone wrong went wrong
+- murphy lawden:
+- "The guy you call when everything that could've gone wrong, went wrong. A cross-OS defensive hardening toolkit + antivirus."
+- "Amnesiac cross-OS hardening toolkit: scans, grades, and fixes your box — with an autopilot and a rootkit/spyware sweep."
+- "Read-only by default, undoable by design. ~185 checks, IOC packs for RATs & spyware, Linux→BSD→Android."
