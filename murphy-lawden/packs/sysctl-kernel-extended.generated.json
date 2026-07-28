@@ -1,0 +1,100 @@
+{
+ "name": "sysctl-kernel-extended",
+ "description": "Extended kernel / memory / BPF hardening sysctls (kernel-hardening guides).  Absent keys/paths SKIP, never false-fail.",
+ "rules": [
+  {
+   "id": "pack.net.core.bpf_jit_harden",
+   "title": "net.core.bpf_jit_harden (want 1)",
+   "kind": "sysctl",
+   "key": "net.core.bpf_jit_harden",
+   "expect": [
+    "1",
+    "2"
+   ],
+   "severity": "MEDIUM",
+   "rationale": "Hardening the BPF JIT blunts JIT-spray exploitation of the packet filter.",
+   "fix": "sysctl -w net.core.bpf_jit_harden=1"
+  },
+  {
+   "id": "pack.dev.tty.ldisc_autoload",
+   "title": "dev.tty.ldisc_autoload (want 0)",
+   "kind": "sysctl",
+   "key": "dev.tty.ldisc_autoload",
+   "expect": "0",
+   "severity": "LOW",
+   "rationale": "Auto-loading TTY line disciplines has been a local-privesc path; pin it off.",
+   "fix": "sysctl -w dev.tty.ldisc_autoload=0"
+  },
+  {
+   "id": "pack.kernel.core_uses_pid",
+   "title": "kernel.core_uses_pid (want 1)",
+   "kind": "sysctl",
+   "key": "kernel.core_uses_pid",
+   "expect": "1",
+   "severity": "LOW",
+   "rationale": "Tagging core dumps with the PID avoids one process clobbering another's core.",
+   "fix": "sysctl -w kernel.core_uses_pid=1"
+  },
+  {
+   "id": "pack.vm.unprivileged_userfaultfd",
+   "title": "vm.unprivileged_userfaultfd (want 0)",
+   "kind": "sysctl",
+   "key": "vm.unprivileged_userfaultfd",
+   "expect": "0",
+   "severity": "MEDIUM",
+   "rationale": "Unprivileged userfaultfd has repeatedly aided use-after-free exploitation.",
+   "fix": "sysctl -w vm.unprivileged_userfaultfd=0",
+   "risk": "medium"
+  },
+  {
+   "id": "pack.kernel.panic_on_oops",
+   "title": "kernel.panic_on_oops (want 1)",
+   "kind": "sysctl",
+   "key": "kernel.panic_on_oops",
+   "expect": "1",
+   "severity": "LOW",
+   "rationale": "Panicking on an oops fails closed instead of running on in a corrupted state.",
+   "fix": "sysctl -w kernel.panic_on_oops=1 (note: turns an oops into a reboot).",
+   "no_autofix": true
+  },
+  {
+   "id": "pack.kernel.modules_disabled",
+   "title": "kernel.modules_disabled (want 1)",
+   "kind": "sysctl",
+   "key": "kernel.modules_disabled",
+   "expect": "1",
+   "severity": "HIGH",
+   "rationale": "Once your modules are loaded, locking further loading blocks a whole class of rootkits.",
+   "fix": "Set kernel.modules_disabled=1 late in boot (one-way until reboot; breaks hot-plug).",
+   "no_autofix": true
+  },
+  {
+   "id": "pack.kernel.io_uring_disabled",
+   "title": "kernel.io_uring_disabled (want 1)",
+   "kind": "sysctl",
+   "key": "kernel.io_uring_disabled",
+   "expect": [
+    "1",
+    "2"
+   ],
+   "severity": "MEDIUM",
+   "rationale": "io_uring is a large, exploit-prone surface; disable it where nothing needs it.",
+   "fix": "sysctl -w kernel.io_uring_disabled=2 (breaks apps that use io_uring).",
+   "no_autofix": true
+  },
+  {
+   "id": "pack.net.ipv4.tcp_sack",
+   "title": "net.ipv4.tcp_sack (want 0)",
+   "kind": "sysctl",
+   "key": "net.ipv4.tcp_sack",
+   "expect": [
+    "0",
+    "1"
+   ],
+   "severity": "INFO",
+   "rationale": "Context only — selective ACK has had DoS CVEs (SACK panic); note the state.",
+   "fix": "sysctl -w net.ipv4.tcp_sack=0",
+   "no_autofix": true
+  }
+ ]
+}

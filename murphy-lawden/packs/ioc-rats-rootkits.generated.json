@@ -1,0 +1,191 @@
+{
+ "name": "ioc-rats-rootkits",
+ "description": "RAT / backdoor / rootkit indicators (Reptile, Diamorphine & other LKM rootkits, BPFDoor, XorDDoS, RotaJakiro, Skidmap, RedXOR/Winnti, HiddenWasp). Present == investigate.  Absent keys/paths SKIP, never false-fail.",
+ "rules": [
+  {
+   "id": "pack.ioc/lkm/known-rootkit-module",
+   "title": "IOC: known LKM-rootkit module loaded",
+   "kind": "cmd",
+   "cmd": [
+    "lsmod"
+   ],
+   "must_not_match": "(?im)\\b(diamorphine|reptile|adore[-_]?ng|adore|knark|modhide|phalanx|sutekh|nuk3gh0st|rooty|enyelkm|kbeast|suterusu|wnps|snd_floppy)\\b",
+   "severity": "CRITICAL",
+   "rationale": "These are the module names of public Linux kernel-mode rootkits (Diamorphine, Reptile, Adore-ng, KBeast, Suterusu, Cloud Snooper's snd_floppy…). A loaded one hides its own processes, files and network ports from you.  Cross-check with a trusted `lsmod` from rescue media — a good rootkit hides itself from the running kernel too.",
+   "fix": "If this indicator is unexpected, treat the host as possibly compromised: isolate it, capture the artifacts for analysis, and hunt for persistence.",
+   "refs": [
+    "known-malware IOC",
+    "rkhunter/Lynis"
+   ],
+   "skip_if_rc_nonzero": true
+  },
+  {
+   "id": "pack.ioc/reptile",
+   "title": "IOC: reptile present (/reptile)",
+   "kind": "path_exists",
+   "path": "/reptile",
+   "should_exist": false,
+   "severity": "CRITICAL",
+   "rationale": "The Reptile LKM rootkit installs into /reptile (reptile_cmd, reptile_shell). Its presence means an active kernel-mode compromise.",
+   "fix": "If you didn't put reptile there deliberately, treat the host as possibly compromised: isolate it, capture the file for analysis, and hunt for persistence.",
+   "refs": [
+    "known-malware IOC",
+    "rkhunter/Lynis"
+   ]
+  },
+  {
+   "id": "pack.ioc/etc/rc.modules",
+   "title": "IOC: rc.modules present (/etc/rc.modules)",
+   "kind": "path_exists",
+   "path": "/etc/rc.modules",
+   "should_exist": false,
+   "severity": "HIGH",
+   "rationale": "Reptile and several LKM rootkits persist by loading their module from /etc/rc.modules.  Legitimate on a few old setups — confirm what it loads.",
+   "fix": "If you didn't put rc.modules there deliberately, treat the host as possibly compromised: isolate it, capture the file for analysis, and hunt for persistence.",
+   "refs": [
+    "known-malware IOC",
+    "rkhunter/Lynis"
+   ]
+  },
+  {
+   "id": "pack.ioc/dev/shm/kdmtmpflush",
+   "title": "IOC: kdmtmpflush present (/dev/shm/kdmtmpflush)",
+   "kind": "path_exists",
+   "path": "/dev/shm/kdmtmpflush",
+   "should_exist": false,
+   "severity": "CRITICAL",
+   "rationale": "kdmtmpflush is a dropper/loader used by the BPFDoor passive backdoor, staged in shared memory to survive on disk-less.",
+   "fix": "If you didn't put kdmtmpflush there deliberately, treat the host as possibly compromised: isolate it, capture the file for analysis, and hunt for persistence.",
+   "refs": [
+    "known-malware IOC",
+    "rkhunter/Lynis"
+   ]
+  },
+  {
+   "id": "pack.ioc/var/run/haldrund.pid",
+   "title": "IOC: haldrund.pid present (/var/run/haldrund.pid)",
+   "kind": "path_exists",
+   "path": "/var/run/haldrund.pid",
+   "should_exist": false,
+   "severity": "HIGH",
+   "rationale": "haldrund.pid is a lock file BPFDoor writes to ensure a single instance — a strong indicator of the BPFDoor implant.",
+   "fix": "If you didn't put haldrund.pid there deliberately, treat the host as possibly compromised: isolate it, capture the file for analysis, and hunt for persistence.",
+   "refs": [
+    "known-malware IOC",
+    "rkhunter/Lynis"
+   ]
+  },
+  {
+   "id": "pack.ioc/etc/cron.hourly/gcc.sh",
+   "title": "IOC: gcc.sh present (/etc/cron.hourly/gcc.sh)",
+   "kind": "path_exists",
+   "path": "/etc/cron.hourly/gcc.sh",
+   "should_exist": false,
+   "severity": "HIGH",
+   "rationale": "gcc.sh in cron.hourly is XorDDoS's persistence stub — it re-drops the bot every hour.",
+   "fix": "If you didn't put gcc.sh there deliberately, treat the host as possibly compromised: isolate it, capture the file for analysis, and hunt for persistence.",
+   "refs": [
+    "known-malware IOC",
+    "rkhunter/Lynis"
+   ]
+  },
+  {
+   "id": "pack.ioc/lib/libudev.so",
+   "title": "IOC: libudev.so present (/lib/libudev.so)",
+   "kind": "path_exists",
+   "path": "/lib/libudev.so",
+   "should_exist": false,
+   "severity": "HIGH",
+   "rationale": "XorDDoS ships a fake /lib/libudev.so (the real library is libudev.so.1 under the arch triplet dir). A bare /lib/libudev.so is a classic XorDDoS marker.  Confirm it isn't a legitimate dev symlink before acting.",
+   "fix": "If you didn't put libudev.so there deliberately, treat the host as possibly compromised: isolate it, capture the file for analysis, and hunt for persistence.",
+   "refs": [
+    "known-malware IOC",
+    "rkhunter/Lynis"
+   ]
+  },
+  {
+   "id": "pack.ioc/lib/systemd/systemd-daemon",
+   "title": "IOC: systemd-daemon present (/lib/systemd/systemd-daemon)",
+   "kind": "path_exists",
+   "path": "/lib/systemd/systemd-daemon",
+   "should_exist": false,
+   "severity": "HIGH",
+   "rationale": "RotaJakiro masquerades as a systemd binary; there is no real 'systemd-daemon'. One of its documented persistence paths.",
+   "fix": "If you didn't put systemd-daemon there deliberately, treat the host as possibly compromised: isolate it, capture the file for analysis, and hunt for persistence.",
+   "refs": [
+    "known-malware IOC",
+    "rkhunter/Lynis"
+   ]
+  },
+  {
+   "id": "pack.ioc/usr/lib/mozillae/mozillat",
+   "title": "IOC: mozillat present (/usr/lib/mozillae/mozillat)",
+   "kind": "path_exists",
+   "path": "/usr/lib/mozillae/mozillat",
+   "should_exist": false,
+   "severity": "HIGH",
+   "rationale": "A RotaJakiro payload path that impersonates Mozilla files.",
+   "fix": "If you didn't put mozillat there deliberately, treat the host as possibly compromised: isolate it, capture the file for analysis, and hunt for persistence.",
+   "refs": [
+    "known-malware IOC",
+    "rkhunter/Lynis"
+   ]
+  },
+  {
+   "id": "pack.ioc/usr/bin/kaudited",
+   "title": "IOC: kaudited present (/usr/bin/kaudited)",
+   "kind": "path_exists",
+   "path": "/usr/bin/kaudited",
+   "should_exist": false,
+   "severity": "HIGH",
+   "rationale": "kaudited is a Skidmap component that installs malicious kernel modules and a fake 'pam' to backdoor authentication.",
+   "fix": "If you didn't put kaudited there deliberately, treat the host as possibly compromised: isolate it, capture the file for analysis, and hunt for persistence.",
+   "refs": [
+    "known-malware IOC",
+    "rkhunter/Lynis"
+   ]
+  },
+  {
+   "id": "pack.ioc/usr/bin/pamdicks",
+   "title": "IOC: pamdicks present (/usr/bin/pamdicks)",
+   "kind": "path_exists",
+   "path": "/usr/bin/pamdicks",
+   "should_exist": false,
+   "severity": "HIGH",
+   "rationale": "pamdicks is a Skidmap payload used for persistence/credential theft.",
+   "fix": "If you didn't put pamdicks there deliberately, treat the host as possibly compromised: isolate it, capture the file for analysis, and hunt for persistence.",
+   "refs": [
+    "known-malware IOC",
+    "rkhunter/Lynis"
+   ]
+  },
+  {
+   "id": "pack.ioc/bin/iptabler",
+   "title": "IOC: iptabler present (/bin/iptabler)",
+   "kind": "path_exists",
+   "path": "/bin/iptabler",
+   "should_exist": false,
+   "severity": "HIGH",
+   "rationale": "iptabler is a RedXOR (Winnti-linked) backdoor component that mimics the iptables name.",
+   "fix": "If you didn't put iptabler there deliberately, treat the host as possibly compromised: isolate it, capture the file for analysis, and hunt for persistence.",
+   "refs": [
+    "known-malware IOC",
+    "rkhunter/Lynis"
+   ]
+  },
+  {
+   "id": "pack.ioc/sbin/.ifup-local",
+   "title": "IOC: .ifup-local present (/sbin/.ifup-local)",
+   "kind": "path_exists",
+   "path": "/sbin/.ifup-local",
+   "should_exist": false,
+   "severity": "HIGH",
+   "rationale": "A dot-hidden network hook script is HiddenWasp-style persistence — legit ifup-local is never hidden.  A visible /sbin/ifup-local can be a normal admin hook; the hidden dot-file is not.",
+   "fix": "If you didn't put .ifup-local there deliberately, treat the host as possibly compromised: isolate it, capture the file for analysis, and hunt for persistence.",
+   "refs": [
+    "known-malware IOC",
+    "rkhunter/Lynis"
+   ]
+  }
+ ]
+}

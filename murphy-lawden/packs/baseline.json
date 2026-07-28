@@ -1,0 +1,35 @@
+{
+  "name": "murphy-baseline",
+  "description": "Bundled offline hardening library — loaded with no network in offline mode.",
+  "rules": [
+    {"id": "pack.tmp_sticky", "title": "/tmp carries the sticky bit", "kind": "file_mode",
+     "path": "/tmp", "max_mode": "1777", "severity": "MEDIUM",
+     "rationale": "Without the sticky bit any local user can delete or replace another user's files in /tmp.",
+     "fix": "chmod 1777 /tmp", "refs": ["CIS Linux 1.1.2"]},
+
+    {"id": "pack.no_telnet", "title": "telnet client absent", "kind": "path_exists",
+     "path": "/usr/bin/telnet", "should_exist": false, "severity": "LOW",
+     "rationale": "The telnet client speaks cleartext; its presence invites cleartext credential use.",
+     "fix": "Remove the telnet client and use ssh instead.", "refs": ["CIS Linux 2.3"]},
+
+    {"id": "pack.no_rsh", "title": "legacy r-services client absent", "kind": "path_exists",
+     "path": "/usr/bin/rsh", "should_exist": false, "severity": "MEDIUM",
+     "rationale": "rsh/rlogin trust host-based auth and send data in the clear — a classic lateral-movement aid.",
+     "fix": "Remove rsh/rlogin/rcp.", "refs": ["CIS Linux 2.3"]},
+
+    {"id": "pack.ptrace_scope", "title": "Yama ptrace_scope is restricted", "kind": "sysctl",
+     "key": "kernel.yama.ptrace_scope", "expect": ["1", "2", "3"], "severity": "MEDIUM",
+     "rationale": "Unrestricted ptrace lets a compromised process read secrets straight out of its siblings.",
+     "fix": "sysctl -w kernel.yama.ptrace_scope=1"},
+
+    {"id": "pack.perf_paranoid", "title": "perf_event_paranoid is locked down", "kind": "sysctl",
+     "key": "kernel.perf_event_paranoid", "expect": ["2", "3"], "severity": "LOW",
+     "rationale": "Loose perf access has repeatedly been a local info-leak and privesc primitive.",
+     "fix": "sysctl -w kernel.perf_event_paranoid=3"},
+
+    {"id": "pack.cron_perm", "title": "/etc/crontab is root-only", "kind": "file_mode",
+     "path": "/etc/crontab", "max_mode": "600", "severity": "MEDIUM",
+     "rationale": "A writable crontab is a direct path to scheduled root code execution.",
+     "fix": "chmod 600 /etc/crontab", "refs": ["CIS Linux 5.1"]}
+  ]
+}

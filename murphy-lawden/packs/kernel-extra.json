@@ -1,0 +1,50 @@
+{
+  "name": "murphy-kernel-extra",
+  "description": "Extra vetted kernel-hardening sysctls (CIS / kernel-hardening guides). Absent keys SKIP, never false-fail.",
+  "rules": [
+    {"id": "pack.fs.suid_dumpable", "title": "SUID programs don't dump core", "kind": "sysctl",
+     "key": "fs.suid_dumpable", "expect": "0", "severity": "MEDIUM",
+     "rationale": "A core dump from a setuid process can spill privileged memory (keys, hashes) to a file a normal user can read.",
+     "fix": "sysctl -w fs.suid_dumpable=0", "refs": ["CIS Linux 1.5.1"]},
+
+    {"id": "pack.fs.protected_hardlinks", "title": "Hardlink protection on", "kind": "sysctl",
+     "key": "fs.protected_hardlinks", "expect": "1", "severity": "LOW",
+     "rationale": "Without it, a user can hardlink to files they don't own and trick a privileged process into following them.",
+     "fix": "sysctl -w fs.protected_hardlinks=1", "refs": ["kernel.org fs docs"]},
+
+    {"id": "pack.fs.protected_symlinks", "title": "Symlink protection on", "kind": "sysctl",
+     "key": "fs.protected_symlinks", "expect": "1", "severity": "LOW",
+     "rationale": "Blocks the classic /tmp symlink race a privileged writer can be tricked into following.",
+     "fix": "sysctl -w fs.protected_symlinks=1", "refs": ["kernel.org fs docs"]},
+
+    {"id": "pack.fs.protected_fifos", "title": "FIFO protection in world-writable dirs", "kind": "sysctl",
+     "key": "fs.protected_fifos", "expect": ["1", "2"], "severity": "LOW",
+     "rationale": "Stops a spoofed FIFO in a sticky world-writable dir being used to hijack a privileged write.",
+     "fix": "sysctl -w fs.protected_fifos=2"},
+
+    {"id": "pack.fs.protected_regular", "title": "Regular-file protection in world-writable dirs", "kind": "sysctl",
+     "key": "fs.protected_regular", "expect": ["1", "2"], "severity": "LOW",
+     "rationale": "Same idea as the FIFO guard, for regular files planted in sticky world-writable dirs.",
+     "fix": "sysctl -w fs.protected_regular=2"},
+
+    {"id": "pack.kexec_disabled", "title": "kexec kernel loading disabled", "kind": "sysctl",
+     "key": "kernel.kexec_load_disabled", "expect": "1", "severity": "MEDIUM", "risk": "medium",
+     "rationale": "kexec can boot an attacker-supplied kernel from a running system, bypassing Secure Boot and persistence defences. Setting it is one-way until reboot, so autopilot only applies it at --risk medium.",
+     "fix": "sysctl -w kernel.kexec_load_disabled=1 (one-way until reboot)"},
+
+    {"id": "pack.sysrq", "title": "Magic SysRq key restricted", "kind": "sysctl",
+     "key": "kernel.sysrq", "expect": ["0", "4", "16", "176"], "severity": "LOW",
+     "rationale": "A wide-open SysRq lets someone at the console dump memory, kill processes, or thaw the box.",
+     "fix": "sysctl -w kernel.sysrq=0 (or 176 to keep only safe functions)"},
+
+    {"id": "pack.userns_clone", "title": "Unprivileged user namespaces restricted", "kind": "sysctl",
+     "key": "kernel.unprivileged_userns_clone", "expect": "0", "severity": "MEDIUM", "no_autofix": true,
+     "rationale": "Unprivileged user namespaces have been a recurring local-privesc surface (Debian-family key; SKIPs elsewhere). But disabling them breaks Flatpak, the Steam sandbox and Chrome's sandbox — so on a desktop this is advisory only, never auto-applied.",
+     "fix": "sysctl -w kernel.unprivileged_userns_clone=0  (skip if you run Flatpak/Steam/Chrome sandboxes)"},
+
+    {"id": "pack.ftrace_restrict", "title": "Kernel ftrace exposure restricted", "kind": "sysctl",
+     "key": "kernel.ftrace_enabled", "expect": ["0", "1"], "severity": "INFO", "no_autofix": true,
+     "rationale": "Context only — ftrace is powerful; note whether it's available on this kernel.",
+     "fix": "Consider disabling tracing on production hosts that don't need it."}
+  ]
+}

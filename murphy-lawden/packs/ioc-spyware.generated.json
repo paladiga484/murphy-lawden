@@ -1,0 +1,178 @@
+{
+ "name": "ioc-spyware",
+ "description": "Spyware / stalkerware / commercial-surveillance indicators — Linux desktop (EvilGnome, logkeys) and Android packages (Pegasus/Chrysaor, TheTruthSpy, Cerberus, SpyMax/SpyNote). For real mobile triage use Amnesty's MVT.  Absent keys/paths SKIP, never false-fail.",
+ "rules": [
+  {
+   "id": "pack.ioc/evilgnome",
+   "title": "IOC: EvilGnome spyware artifacts in a home dir",
+   "kind": "cmd",
+   "cmd": [
+    "find",
+    "/home",
+    "/root",
+    "-maxdepth",
+    "5",
+    "-name",
+    "gnome-shell-ext.sh"
+   ],
+   "must_not_match": "gnome-shell-ext\\.sh",
+   "severity": "CRITICAL",
+   "rationale": "EvilGnome is Linux desktop spyware (screenshots, audio capture, file exfil) that disguises itself as a GNOME Shell extension and persists via ~/.config/autostart.",
+   "fix": "If this indicator is unexpected, treat the host as possibly compromised: isolate it, capture the artifacts for analysis, and hunt for persistence.",
+   "refs": [
+    "known-malware IOC",
+    "rkhunter/Lynis"
+   ]
+  },
+  {
+   "id": "pack.ioc/evilgnome/autostart",
+   "title": "IOC: EvilGnome autostart entry",
+   "kind": "cmd",
+   "cmd": [
+    "find",
+    "/home",
+    "/root",
+    "-maxdepth",
+    "5",
+    "-name",
+    "gnome-shell-ext.desktop"
+   ],
+   "must_not_match": "gnome-shell-ext\\.desktop",
+   "severity": "CRITICAL",
+   "rationale": "The autostart .desktop file EvilGnome drops so its agent relaunches at login.",
+   "fix": "If this indicator is unexpected, treat the host as possibly compromised: isolate it, capture the artifacts for analysis, and hunt for persistence.",
+   "refs": [
+    "known-malware IOC",
+    "rkhunter/Lynis"
+   ]
+  },
+  {
+   "id": "pack.ioc/var/log/logkeys.log",
+   "title": "IOC: logkeys.log present (/var/log/logkeys.log)",
+   "kind": "path_exists",
+   "path": "/var/log/logkeys.log",
+   "should_exist": false,
+   "severity": "MEDIUM",
+   "rationale": "logkeys is a userspace keylogger; its default logfile here means keystrokes are being recorded.  Dual-use — only benign if you set it up yourself.",
+   "fix": "If you didn't put logkeys.log there deliberately, treat the host as possibly compromised: isolate it, capture the file for analysis, and hunt for persistence.",
+   "refs": [
+    "known-malware IOC",
+    "rkhunter/Lynis"
+   ]
+  },
+  {
+   "id": "pack.ioc/usr/bin/logkeys",
+   "title": "IOC: logkeys present (/usr/bin/logkeys)",
+   "kind": "path_exists",
+   "path": "/usr/bin/logkeys",
+   "should_exist": false,
+   "severity": "MEDIUM",
+   "rationale": "The logkeys keylogger binary. Legitimate only if you installed it deliberately.",
+   "fix": "If you didn't put logkeys there deliberately, treat the host as possibly compromised: isolate it, capture the file for analysis, and hunt for persistence.",
+   "refs": [
+    "known-malware IOC",
+    "rkhunter/Lynis"
+   ]
+  },
+  {
+   "id": "pack.ioc/android/pegasus-chrysaor",
+   "title": "IOC: Pegasus (Chrysaor) package installed",
+   "kind": "cmd",
+   "cmd": [
+    "pm",
+    "list",
+    "packages"
+   ],
+   "must_not_match": "(?im)\\bcom\\.network\\.android\\b",
+   "severity": "CRITICAL",
+   "rationale": "com.network.android is the documented package name of Chrysaor, the Android build of NSO Group's Pegasus spyware.  For a real mobile-spyware investigation use Amnesty International's MVT.",
+   "fix": "If this indicator is unexpected, treat the host as possibly compromised: isolate it, capture the artifacts for analysis, and hunt for persistence.",
+   "refs": [
+    "known-malware IOC",
+    "rkhunter/Lynis"
+   ],
+   "skip_if_rc_nonzero": true,
+   "family": "android"
+  },
+  {
+   "id": "pack.ioc/android/thetruthspy",
+   "title": "IOC: TheTruthSpy stalkerware package installed",
+   "kind": "cmd",
+   "cmd": [
+    "pm",
+    "list",
+    "packages"
+   ],
+   "must_not_match": "(?im)\\bcom\\.systemservice\\b",
+   "severity": "HIGH",
+   "rationale": "com.systemservice is the package used by the TheTruthSpy stalkerware family, which hides as a fake 'System Service' app.",
+   "fix": "If this indicator is unexpected, treat the host as possibly compromised: isolate it, capture the artifacts for analysis, and hunt for persistence.",
+   "refs": [
+    "known-malware IOC",
+    "rkhunter/Lynis"
+   ],
+   "skip_if_rc_nonzero": true,
+   "family": "android"
+  },
+  {
+   "id": "pack.ioc/android/cerberus",
+   "title": "IOC: Cerberus (abusable tracker) package installed",
+   "kind": "cmd",
+   "cmd": [
+    "pm",
+    "list",
+    "packages"
+   ],
+   "must_not_match": "(?im)\\bcom\\.lsdroid\\.cerberus\\b",
+   "severity": "MEDIUM",
+   "rationale": "Cerberus is an anti-theft app routinely abused as covert stalkerware (remote mic, location, photos).  Legitimate if YOU installed it as anti-theft; a red flag if you didn't.",
+   "fix": "If this indicator is unexpected, treat the host as possibly compromised: isolate it, capture the artifacts for analysis, and hunt for persistence.",
+   "refs": [
+    "known-malware IOC",
+    "rkhunter/Lynis"
+   ],
+   "skip_if_rc_nonzero": true,
+   "family": "android"
+  },
+  {
+   "id": "pack.ioc/android/spymax-rat",
+   "title": "IOC: SpyMax/SpyNote-style RAT service present",
+   "kind": "cmd",
+   "cmd": [
+    "pm",
+    "list",
+    "packages"
+   ],
+   "must_not_match": "(?im)\\b(com\\.mrraven|com\\.spymax|com\\.example\\.spynote)\\b",
+   "severity": "HIGH",
+   "rationale": "Package names associated with the SpyMax / SpyNote Android RAT builders, common in targeted mobile surveillance.",
+   "fix": "If this indicator is unexpected, treat the host as possibly compromised: isolate it, capture the artifacts for analysis, and hunt for persistence.",
+   "refs": [
+    "known-malware IOC",
+    "rkhunter/Lynis"
+   ],
+   "skip_if_rc_nonzero": true,
+   "family": "android"
+  },
+  {
+   "id": "pack.ioc/android/frida-package",
+   "title": "IOC: on-device frida app installed",
+   "kind": "cmd",
+   "cmd": [
+    "pm",
+    "list",
+    "packages"
+   ],
+   "must_not_match": "(?im)\\bre\\.frida\\.server\\b",
+   "severity": "MEDIUM",
+   "rationale": "The frida instrumentation app can hook other apps' memory — legit for researchers, a hooking implant otherwise.  Pairs with the frida-server staging check in Murphy's Android module.",
+   "fix": "If this indicator is unexpected, treat the host as possibly compromised: isolate it, capture the artifacts for analysis, and hunt for persistence.",
+   "refs": [
+    "known-malware IOC",
+    "rkhunter/Lynis"
+   ],
+   "skip_if_rc_nonzero": true,
+   "family": "android"
+  }
+ ]
+}
