@@ -1,0 +1,60 @@
+{
+  "name": "murphy-filesystem-extra",
+  "description": "Extra vetted file-permission and legacy-tool checks (CIS Linux 6.1 / 2.3). Absent paths SKIP or PASS, never false-fail.",
+  "rules": [
+    {"id": "pack.perm.shadow_backup", "title": "/etc/shadow- backup is root-only", "kind": "file_mode",
+     "path": "/etc/shadow-", "max_mode": "640", "severity": "HIGH",
+     "rationale": "The shadow backup holds the same password hashes as the live file; a loose mode leaks them for offline cracking.",
+     "fix": "chmod 640 /etc/shadow-", "refs": ["CIS Linux 6.1.7"]},
+
+    {"id": "pack.perm.gshadow_backup", "title": "/etc/gshadow- backup is root-only", "kind": "file_mode",
+     "path": "/etc/gshadow-", "max_mode": "640", "severity": "HIGH",
+     "rationale": "Group password backup — same leak risk as shadow-.",
+     "fix": "chmod 640 /etc/gshadow-", "refs": ["CIS Linux 6.1.9"]},
+
+    {"id": "pack.perm.passwd_backup", "title": "/etc/passwd- backup not world/group writable", "kind": "file_mode",
+     "path": "/etc/passwd-", "max_mode": "644", "severity": "MEDIUM",
+     "rationale": "A writable passwd backup can be swapped in to seed rogue accounts.",
+     "fix": "chmod 644 /etc/passwd-", "refs": ["CIS Linux 6.1.6"]},
+
+    {"id": "pack.perm.group_backup", "title": "/etc/group- backup not world/group writable", "kind": "file_mode",
+     "path": "/etc/group-", "max_mode": "644", "severity": "LOW",
+     "rationale": "A writable group backup can be used to grant group membership (e.g. wheel/sudo).",
+     "fix": "chmod 644 /etc/group-", "refs": ["CIS Linux 6.1.8"]},
+
+    {"id": "pack.perm.sshd_config", "title": "sshd_config not world/group writable", "kind": "file_mode",
+     "path": "/etc/ssh/sshd_config", "max_mode": "644", "severity": "HIGH",
+     "rationale": "A writable sshd_config lets a local user weaken SSH (re-enable root/password login) before the next reload.",
+     "fix": "chmod 600 /etc/ssh/sshd_config", "refs": ["CIS Linux 5.2.1"]},
+
+    {"id": "pack.perm.grub_cfg", "title": "GRUB config is root-only", "kind": "file_mode",
+     "path": "/boot/grub/grub.cfg", "max_mode": "600", "severity": "MEDIUM",
+     "rationale": "A readable/writable grub.cfg leaks boot parameters and can hide a password hash or be edited to weaken boot.",
+     "fix": "chmod 600 /boot/grub/grub.cfg (path SKIPs if your bootloader differs)", "refs": ["CIS Linux 1.4.1"]},
+
+    {"id": "pack.perm.crontab_dir", "title": "/etc/cron.d is root-only", "kind": "file_mode",
+     "path": "/etc/cron.d", "max_mode": "700", "severity": "MEDIUM",
+     "rationale": "Anyone who can write into a cron directory schedules code as root.",
+     "fix": "chmod 700 /etc/cron.d", "refs": ["CIS Linux 5.1.5"]},
+
+    {"id": "pack.no_rlogin", "title": "rlogin client absent", "kind": "path_exists",
+     "path": "/usr/bin/rlogin", "should_exist": false, "severity": "MEDIUM",
+     "rationale": "rlogin trusts host-based auth and speaks cleartext — a lateral-movement gift.",
+     "fix": "Remove rlogin; use ssh.", "refs": ["CIS Linux 2.3.3"]},
+
+    {"id": "pack.no_rcp", "title": "rcp client absent", "kind": "path_exists",
+     "path": "/usr/bin/rcp", "should_exist": false, "severity": "MEDIUM",
+     "rationale": "rcp is the cleartext cousin of scp; its presence invites insecure copies.",
+     "fix": "Remove rcp; use scp/sftp/rsync-over-ssh.", "refs": ["CIS Linux 2.3.3"]},
+
+    {"id": "pack.no_ypbind", "title": "NIS client (ypbind) absent", "kind": "path_exists",
+     "path": "/usr/sbin/ypbind", "should_exist": false, "severity": "MEDIUM",
+     "rationale": "NIS/yp is an obsolete, unauthenticated directory service — a well-known soft target.",
+     "fix": "Remove NIS; use LDAP/SSSD or local accounts.", "refs": ["CIS Linux 2.3.1"]},
+
+    {"id": "pack.no_tftp", "title": "TFTP client absent", "kind": "path_exists",
+     "path": "/usr/bin/tftp", "should_exist": false, "severity": "LOW",
+     "rationale": "TFTP has no authentication and is a common exfil/staging tool once a box is popped.",
+     "fix": "Remove the tftp client unless a device workflow truly needs it.", "refs": ["CIS Linux 2.3"]}
+  ]
+}

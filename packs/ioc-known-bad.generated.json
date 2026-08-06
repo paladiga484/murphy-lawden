@@ -1,0 +1,258 @@
+{
+ "name": "ioc-known-bad",
+ "description": "Known-bad file indicators for common Linux malware (Kinsing, XMRig, libprocesshider, Diicot, hidden-sshd backdoors). Conservative — present == investigate.  Absent keys/paths SKIP, never false-fail.",
+ "rules": [
+  {
+   "id": "pack.ioc/tmp/kdevtmpfsi",
+   "title": "IOC: kdevtmpfsi present (/tmp/kdevtmpfsi)",
+   "kind": "path_exists",
+   "path": "/tmp/kdevtmpfsi",
+   "should_exist": false,
+   "severity": "HIGH",
+   "rationale": "kdevtmpfsi is the payload of the Kinsing cryptomining malware — one of the most common Linux server infections.",
+   "fix": "If you didn't put kdevtmpfsi there deliberately, treat the host as possibly compromised: isolate it, capture the file for analysis, and hunt for persistence.",
+   "refs": [
+    "known-malware IOC",
+    "rkhunter/Lynis"
+   ]
+  },
+  {
+   "id": "pack.ioc/tmp/kinsing",
+   "title": "IOC: kinsing present (/tmp/kinsing)",
+   "kind": "path_exists",
+   "path": "/tmp/kinsing",
+   "should_exist": false,
+   "severity": "HIGH",
+   "rationale": "The Kinsing malware dropper itself.",
+   "fix": "If you didn't put kinsing there deliberately, treat the host as possibly compromised: isolate it, capture the file for analysis, and hunt for persistence.",
+   "refs": [
+    "known-malware IOC",
+    "rkhunter/Lynis"
+   ]
+  },
+  {
+   "id": "pack.ioc/var/tmp/kinsing",
+   "title": "IOC: kinsing present (/var/tmp/kinsing)",
+   "kind": "path_exists",
+   "path": "/var/tmp/kinsing",
+   "should_exist": false,
+   "severity": "HIGH",
+   "rationale": "The Kinsing dropper in its other common location.",
+   "fix": "If you didn't put kinsing there deliberately, treat the host as possibly compromised: isolate it, capture the file for analysis, and hunt for persistence.",
+   "refs": [
+    "known-malware IOC",
+    "rkhunter/Lynis"
+   ]
+  },
+  {
+   "id": "pack.ioc/dev/shm/kdevtmpfsi",
+   "title": "IOC: kdevtmpfsi present (/dev/shm/kdevtmpfsi)",
+   "kind": "path_exists",
+   "path": "/dev/shm/kdevtmpfsi",
+   "should_exist": false,
+   "severity": "HIGH",
+   "rationale": "Kinsing miner staged in shared memory.",
+   "fix": "If you didn't put kdevtmpfsi there deliberately, treat the host as possibly compromised: isolate it, capture the file for analysis, and hunt for persistence.",
+   "refs": [
+    "known-malware IOC",
+    "rkhunter/Lynis"
+   ]
+  },
+  {
+   "id": "pack.ioc/usr/bin/kthrotlds",
+   "title": "IOC: kthrotlds present (/usr/bin/kthrotlds)",
+   "kind": "path_exists",
+   "path": "/usr/bin/kthrotlds",
+   "should_exist": false,
+   "severity": "HIGH",
+   "rationale": "kthrotlds masquerades as a kernel thread; it's a well-known cryptominer.",
+   "fix": "If you didn't put kthrotlds there deliberately, treat the host as possibly compromised: isolate it, capture the file for analysis, and hunt for persistence.",
+   "refs": [
+    "known-malware IOC",
+    "rkhunter/Lynis"
+   ]
+  },
+  {
+   "id": "pack.ioc/usr/lib/libprocesshider.so",
+   "title": "IOC: libprocesshider.so present (/usr/lib/libprocesshider.so)",
+   "kind": "path_exists",
+   "path": "/usr/lib/libprocesshider.so",
+   "should_exist": false,
+   "severity": "CRITICAL",
+   "rationale": "libprocesshider is a userland rootkit that hides malicious processes via ld.so.preload.  Its presence usually accompanies an active compromise.",
+   "fix": "If you didn't put libprocesshider.so there deliberately, treat the host as possibly compromised: isolate it, capture the file for analysis, and hunt for persistence.",
+   "refs": [
+    "known-malware IOC",
+    "rkhunter/Lynis"
+   ]
+  },
+  {
+   "id": "pack.ioc/usr/local/lib/libprocesshider.so",
+   "title": "IOC: libprocesshider.so present (/usr/local/lib/libprocesshider.so)",
+   "kind": "path_exists",
+   "path": "/usr/local/lib/libprocesshider.so",
+   "should_exist": false,
+   "severity": "CRITICAL",
+   "rationale": "libprocesshider rootkit (alternate path).",
+   "fix": "If you didn't put libprocesshider.so there deliberately, treat the host as possibly compromised: isolate it, capture the file for analysis, and hunt for persistence.",
+   "refs": [
+    "known-malware IOC",
+    "rkhunter/Lynis"
+   ]
+  },
+  {
+   "id": "pack.ioc/var/tmp/.diicot",
+   "title": "IOC: .diicot present (/var/tmp/.diicot)",
+   "kind": "path_exists",
+   "path": "/var/tmp/.diicot",
+   "should_exist": false,
+   "severity": "HIGH",
+   "rationale": "Artifact of the Diicot (formerly 'Mexals') Linux botnet/miner.",
+   "fix": "If you didn't put .diicot there deliberately, treat the host as possibly compromised: isolate it, capture the file for analysis, and hunt for persistence.",
+   "refs": [
+    "known-malware IOC",
+    "rkhunter/Lynis"
+   ]
+  },
+  {
+   "id": "pack.ioc/var/tmp/.update-logs",
+   "title": "IOC: .update-logs present (/var/tmp/.update-logs)",
+   "kind": "path_exists",
+   "path": "/var/tmp/.update-logs",
+   "should_exist": false,
+   "severity": "MEDIUM",
+   "rationale": "A hidden staging dir used by several Linux miners/botnets.",
+   "fix": "If you didn't put .update-logs there deliberately, treat the host as possibly compromised: isolate it, capture the file for analysis, and hunt for persistence.",
+   "refs": [
+    "known-malware IOC",
+    "rkhunter/Lynis"
+   ]
+  },
+  {
+   "id": "pack.ioc/tmp/.diicot",
+   "title": "IOC: .diicot present (/tmp/.diicot)",
+   "kind": "path_exists",
+   "path": "/tmp/.diicot",
+   "should_exist": false,
+   "severity": "HIGH",
+   "rationale": "Diicot botnet artifact in /tmp.",
+   "fix": "If you didn't put .diicot there deliberately, treat the host as possibly compromised: isolate it, capture the file for analysis, and hunt for persistence.",
+   "refs": [
+    "known-malware IOC",
+    "rkhunter/Lynis"
+   ]
+  },
+  {
+   "id": "pack.ioc/usr/bin/.sshd",
+   "title": "IOC: .sshd present (/usr/bin/.sshd)",
+   "kind": "path_exists",
+   "path": "/usr/bin/.sshd",
+   "should_exist": false,
+   "severity": "CRITICAL",
+   "rationale": "A dot-hidden 'sshd' is a classic backdoor named to blend in with the real daemon.",
+   "fix": "If you didn't put .sshd there deliberately, treat the host as possibly compromised: isolate it, capture the file for analysis, and hunt for persistence.",
+   "refs": [
+    "known-malware IOC",
+    "rkhunter/Lynis"
+   ]
+  },
+  {
+   "id": "pack.ioc/usr/sbin/.sshd",
+   "title": "IOC: .sshd present (/usr/sbin/.sshd)",
+   "kind": "path_exists",
+   "path": "/usr/sbin/.sshd",
+   "should_exist": false,
+   "severity": "CRITICAL",
+   "rationale": "Hidden 'sshd' backdoor (alternate path).",
+   "fix": "If you didn't put .sshd there deliberately, treat the host as possibly compromised: isolate it, capture the file for analysis, and hunt for persistence.",
+   "refs": [
+    "known-malware IOC",
+    "rkhunter/Lynis"
+   ]
+  },
+  {
+   "id": "pack.ioc/bin/.sshd",
+   "title": "IOC: .sshd present (/bin/.sshd)",
+   "kind": "path_exists",
+   "path": "/bin/.sshd",
+   "should_exist": false,
+   "severity": "CRITICAL",
+   "rationale": "Hidden 'sshd' backdoor (alternate path).",
+   "fix": "If you didn't put .sshd there deliberately, treat the host as possibly compromised: isolate it, capture the file for analysis, and hunt for persistence.",
+   "refs": [
+    "known-malware IOC",
+    "rkhunter/Lynis"
+   ]
+  },
+  {
+   "id": "pack.ioc/tmp/.X25-unix/.rsync",
+   "title": "IOC: .rsync present (/tmp/.X25-unix/.rsync)",
+   "kind": "path_exists",
+   "path": "/tmp/.X25-unix/.rsync",
+   "should_exist": false,
+   "severity": "HIGH",
+   "rationale": "Path used by the outlaw/'rsync' Linux mining botnet.",
+   "fix": "If you didn't put .rsync there deliberately, treat the host as possibly compromised: isolate it, capture the file for analysis, and hunt for persistence.",
+   "refs": [
+    "known-malware IOC",
+    "rkhunter/Lynis"
+   ]
+  },
+  {
+   "id": "pack.ioc/tmp/xmrig",
+   "title": "IOC: xmrig present (/tmp/xmrig)",
+   "kind": "path_exists",
+   "path": "/tmp/xmrig",
+   "should_exist": false,
+   "severity": "MEDIUM",
+   "rationale": "XMRig is a Monero miner — legitimate if YOU run it, but a top sign of a cryptojacked box.  Only benign if you mine on purpose.",
+   "fix": "If you didn't put xmrig there deliberately, treat the host as possibly compromised: isolate it, capture the file for analysis, and hunt for persistence.",
+   "refs": [
+    "known-malware IOC",
+    "rkhunter/Lynis"
+   ]
+  },
+  {
+   "id": "pack.ioc/usr/local/bin/xmrig",
+   "title": "IOC: xmrig present (/usr/local/bin/xmrig)",
+   "kind": "path_exists",
+   "path": "/usr/local/bin/xmrig",
+   "should_exist": false,
+   "severity": "MEDIUM",
+   "rationale": "XMRig cryptominer in a system path (see above).",
+   "fix": "If you didn't put xmrig there deliberately, treat the host as possibly compromised: isolate it, capture the file for analysis, and hunt for persistence.",
+   "refs": [
+    "known-malware IOC",
+    "rkhunter/Lynis"
+   ]
+  },
+  {
+   "id": "pack.ioc/opt/xmrig",
+   "title": "IOC: xmrig present (/opt/xmrig)",
+   "kind": "path_exists",
+   "path": "/opt/xmrig",
+   "should_exist": false,
+   "severity": "MEDIUM",
+   "rationale": "XMRig cryptominer install (see above).",
+   "fix": "If you didn't put xmrig there deliberately, treat the host as possibly compromised: isolate it, capture the file for analysis, and hunt for persistence.",
+   "refs": [
+    "known-malware IOC",
+    "rkhunter/Lynis"
+   ]
+  },
+  {
+   "id": "pack.ioc/etc/ld.so.preload.bak",
+   "title": "IOC: ld.so.preload.bak present (/etc/ld.so.preload.bak)",
+   "kind": "path_exists",
+   "path": "/etc/ld.so.preload.bak",
+   "should_exist": false,
+   "severity": "MEDIUM",
+   "rationale": "A backup of ld.so.preload often left behind by preload-based rootkit installers.",
+   "fix": "If you didn't put ld.so.preload.bak there deliberately, treat the host as possibly compromised: isolate it, capture the file for analysis, and hunt for persistence.",
+   "refs": [
+    "known-malware IOC",
+    "rkhunter/Lynis"
+   ]
+  }
+ ]
+}

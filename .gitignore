@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+
+# Murphy — restore points / backups from `fix` (never commit host state)
+.murphy-backups/
+*.murphy.bak
+
+# Editors / OS cruft
+.vscode/
+.idea/
+*.swp
+.DS_Store

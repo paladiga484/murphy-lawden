@@ -1,0 +1,140 @@
+{
+ "name": "sysctl-network-extended",
+ "description": "Extended IPv4/IPv6 network-stack sysctls (CIS 3.x, IPv6 parity).  Absent keys/paths SKIP, never false-fail.",
+ "rules": [
+  {
+   "id": "pack.net.ipv4.conf.all.secure_redirects",
+   "title": "net.ipv4.conf.all.secure_redirects (want 0)",
+   "kind": "sysctl",
+   "key": "net.ipv4.conf.all.secure_redirects",
+   "expect": "0",
+   "severity": "MEDIUM",
+   "rationale": "Even 'secure' ICMP redirects let a gateway reshape your routing — only accept from none.",
+   "fix": "sysctl -w net.ipv4.conf.all.secure_redirects=0"
+  },
+  {
+   "id": "pack.net.ipv4.conf.default.secure_redirects",
+   "title": "net.ipv4.conf.default.secure_redirects (want 0)",
+   "kind": "sysctl",
+   "key": "net.ipv4.conf.default.secure_redirects",
+   "expect": "0",
+   "severity": "MEDIUM",
+   "rationale": "Same as above for interfaces brought up later.",
+   "fix": "sysctl -w net.ipv4.conf.default.secure_redirects=0"
+  },
+  {
+   "id": "pack.net.ipv4.conf.default.log_martians",
+   "title": "net.ipv4.conf.default.log_martians (want 1)",
+   "kind": "sysctl",
+   "key": "net.ipv4.conf.default.log_martians",
+   "expect": "1",
+   "severity": "LOW",
+   "rationale": "Log impossible source addresses on new interfaces too — early spoofing warning.",
+   "fix": "sysctl -w net.ipv4.conf.default.log_martians=1"
+  },
+  {
+   "id": "pack.net.ipv4.tcp_rfc1337",
+   "title": "net.ipv4.tcp_rfc1337 (want 1)",
+   "kind": "sysctl",
+   "key": "net.ipv4.tcp_rfc1337",
+   "expect": "1",
+   "severity": "LOW",
+   "rationale": "RFC1337 protection drops the TIME-WAIT assassination hazard.",
+   "fix": "sysctl -w net.ipv4.tcp_rfc1337=1"
+  },
+  {
+   "id": "pack.net.ipv6.conf.default.accept_redirects",
+   "title": "net.ipv6.conf.default.accept_redirects (want 0)",
+   "kind": "sysctl",
+   "key": "net.ipv6.conf.default.accept_redirects",
+   "expect": "0",
+   "severity": "MEDIUM",
+   "rationale": "IPv6 redirect-reroute protection on interfaces brought up later.",
+   "fix": "sysctl -w net.ipv6.conf.default.accept_redirects=0"
+  },
+  {
+   "id": "pack.net.ipv6.conf.all.accept_source_route",
+   "title": "net.ipv6.conf.all.accept_source_route (want 0)",
+   "kind": "sysctl",
+   "key": "net.ipv6.conf.all.accept_source_route",
+   "expect": "0",
+   "severity": "MEDIUM",
+   "rationale": "Source-routed IPv6 packets can dictate their own return path — spoofing aid.",
+   "fix": "sysctl -w net.ipv6.conf.all.accept_source_route=0"
+  },
+  {
+   "id": "pack.net.ipv6.conf.default.accept_source_route",
+   "title": "net.ipv6.conf.default.accept_source_route (want 0)",
+   "kind": "sysctl",
+   "key": "net.ipv6.conf.default.accept_source_route",
+   "expect": "0",
+   "severity": "MEDIUM",
+   "rationale": "Same, for interfaces brought up later.",
+   "fix": "sysctl -w net.ipv6.conf.default.accept_source_route=0"
+  },
+  {
+   "id": "pack.net.ipv6.conf.default.accept_ra",
+   "title": "net.ipv6.conf.default.accept_ra (want 0)",
+   "kind": "sysctl",
+   "key": "net.ipv6.conf.default.accept_ra",
+   "expect": [
+    "0",
+    "1"
+   ],
+   "severity": "LOW",
+   "rationale": "A rogue router advertisement can hijack your default gateway; disable RA on non-routers.",
+   "fix": "On non-routers set net.ipv6.conf.default.accept_ra=0.",
+   "no_autofix": true
+  },
+  {
+   "id": "pack.net.ipv4.ip_forward",
+   "title": "net.ipv4.ip_forward (want 0)",
+   "kind": "sysctl",
+   "key": "net.ipv4.ip_forward",
+   "expect": "0",
+   "severity": "LOW",
+   "rationale": "IP forwarding turns a host into a router; leave it off unless it genuinely routes.",
+   "fix": "sysctl -w net.ipv4.ip_forward=0 (skip if this box is a router/VM host/VPN gateway).",
+   "no_autofix": true
+  },
+  {
+   "id": "pack.net.ipv6.conf.all.forwarding",
+   "title": "net.ipv6.conf.all.forwarding (want 0)",
+   "kind": "sysctl",
+   "key": "net.ipv6.conf.all.forwarding",
+   "expect": "0",
+   "severity": "LOW",
+   "rationale": "IPv6 forwarding equivalent — off unless this host really routes IPv6.",
+   "fix": "sysctl -w net.ipv6.conf.all.forwarding=0",
+   "no_autofix": true
+  },
+  {
+   "id": "pack.net.ipv4.conf.all.arp_ignore",
+   "title": "net.ipv4.conf.all.arp_ignore (want 1)",
+   "kind": "sysctl",
+   "key": "net.ipv4.conf.all.arp_ignore",
+   "expect": [
+    "1",
+    "2"
+   ],
+   "severity": "LOW",
+   "rationale": "Restricting ARP replies reduces ARP-cache-poisoning surface on multi-homed hosts.",
+   "fix": "sysctl -w net.ipv4.conf.all.arp_ignore=1",
+   "no_autofix": true
+  },
+  {
+   "id": "pack.net.ipv4.conf.all.arp_announce",
+   "title": "net.ipv4.conf.all.arp_announce (want 1)",
+   "kind": "sysctl",
+   "key": "net.ipv4.conf.all.arp_announce",
+   "expect": [
+    "1",
+    "2"
+   ],
+   "severity": "LOW",
+   "rationale": "Conservative ARP announcements avoid leaking addresses across interfaces.",
+   "fix": "sysctl -w net.ipv4.conf.all.arp_announce=1",
+   "no_autofix": true
+  }
+ ]
+}

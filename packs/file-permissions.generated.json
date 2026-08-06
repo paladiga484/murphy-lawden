@@ -1,0 +1,253 @@
+{
+ "name": "file-permissions",
+ "description": "Credential, cron, auth and banner file/dir permissions (CIS 6.1 / 5.1).  Absent keys/paths SKIP, never false-fail.",
+ "rules": [
+  {
+   "id": "pack.perm/etc/security/opasswd",
+   "title": "/etc/security/opasswd not overly permissive",
+   "kind": "file_mode",
+   "path": "/etc/security/opasswd",
+   "max_mode": "600",
+   "severity": "HIGH",
+   "rationale": "opasswd stores old password hashes for reuse checks — same offline-cracking risk as shadow.",
+   "fix": "chmod 600 /etc/security/opasswd",
+   "refs": [
+    "CIS Linux Benchmark 6.1"
+   ]
+  },
+  {
+   "id": "pack.perm/etc/login.defs",
+   "title": "/etc/login.defs not overly permissive",
+   "kind": "file_mode",
+   "path": "/etc/login.defs",
+   "max_mode": "644",
+   "severity": "LOW",
+   "rationale": "login.defs sets password/UID policy; a writable copy lets a user relax it.",
+   "fix": "chmod 644 /etc/login.defs",
+   "refs": [
+    "CIS Linux Benchmark 6.1"
+   ]
+  },
+  {
+   "id": "pack.perm/etc/ssh/ssh_config",
+   "title": "/etc/ssh/ssh_config not overly permissive",
+   "kind": "file_mode",
+   "path": "/etc/ssh/ssh_config",
+   "max_mode": "644",
+   "severity": "LOW",
+   "rationale": "A writable client config can be used to weaken outbound SSH (e.g. disable host-key checks).",
+   "fix": "chmod 644 /etc/ssh/ssh_config",
+   "refs": [
+    "CIS Linux Benchmark 6.1"
+   ]
+  },
+  {
+   "id": "pack.perm/etc/sudoers",
+   "title": "/etc/sudoers not overly permissive",
+   "kind": "file_mode",
+   "path": "/etc/sudoers",
+   "max_mode": "440",
+   "severity": "HIGH",
+   "rationale": "A writable sudoers file is a direct, unaudited path to root.",
+   "fix": "chmod 440 /etc/sudoers",
+   "refs": [
+    "CIS Linux Benchmark 6.1"
+   ]
+  },
+  {
+   "id": "pack.perm/etc/sudoers.d",
+   "title": "/etc/sudoers.d not overly permissive",
+   "kind": "file_mode",
+   "path": "/etc/sudoers.d",
+   "max_mode": "750",
+   "severity": "HIGH",
+   "rationale": "A writable sudoers.d drop-in directory is the same root path by another door.",
+   "fix": "chmod 750 /etc/sudoers.d",
+   "refs": [
+    "CIS Linux Benchmark 6.1"
+   ]
+  },
+  {
+   "id": "pack.perm/etc/cron.hourly",
+   "title": "/etc/cron.hourly not overly permissive",
+   "kind": "file_mode",
+   "path": "/etc/cron.hourly",
+   "max_mode": "700",
+   "severity": "MEDIUM",
+   "rationale": "Writable cron dir = scheduled root code execution.",
+   "fix": "chmod 700 /etc/cron.hourly",
+   "refs": [
+    "CIS Linux Benchmark 6.1"
+   ]
+  },
+  {
+   "id": "pack.perm/etc/cron.daily",
+   "title": "/etc/cron.daily not overly permissive",
+   "kind": "file_mode",
+   "path": "/etc/cron.daily",
+   "max_mode": "700",
+   "severity": "MEDIUM",
+   "rationale": "Writable cron dir = scheduled root code execution.",
+   "fix": "chmod 700 /etc/cron.daily",
+   "refs": [
+    "CIS Linux Benchmark 6.1"
+   ]
+  },
+  {
+   "id": "pack.perm/etc/cron.weekly",
+   "title": "/etc/cron.weekly not overly permissive",
+   "kind": "file_mode",
+   "path": "/etc/cron.weekly",
+   "max_mode": "700",
+   "severity": "MEDIUM",
+   "rationale": "Writable cron dir = scheduled root code execution.",
+   "fix": "chmod 700 /etc/cron.weekly",
+   "refs": [
+    "CIS Linux Benchmark 6.1"
+   ]
+  },
+  {
+   "id": "pack.perm/etc/cron.monthly",
+   "title": "/etc/cron.monthly not overly permissive",
+   "kind": "file_mode",
+   "path": "/etc/cron.monthly",
+   "max_mode": "700",
+   "severity": "MEDIUM",
+   "rationale": "Writable cron dir = scheduled root code execution.",
+   "fix": "chmod 700 /etc/cron.monthly",
+   "refs": [
+    "CIS Linux Benchmark 6.1"
+   ]
+  },
+  {
+   "id": "pack.perm/etc/cron.allow",
+   "title": "/etc/cron.allow not overly permissive",
+   "kind": "file_mode",
+   "path": "/etc/cron.allow",
+   "max_mode": "640",
+   "severity": "LOW",
+   "rationale": "cron.allow controls who may schedule jobs; keep it tight.",
+   "fix": "chmod 640 /etc/cron.allow",
+   "refs": [
+    "CIS Linux Benchmark 6.1"
+   ]
+  },
+  {
+   "id": "pack.perm/etc/cron.deny",
+   "title": "/etc/cron.deny not overly permissive",
+   "kind": "file_mode",
+   "path": "/etc/cron.deny",
+   "max_mode": "640",
+   "severity": "LOW",
+   "rationale": "cron.deny is part of the same access decision.",
+   "fix": "chmod 640 /etc/cron.deny",
+   "refs": [
+    "CIS Linux Benchmark 6.1"
+   ]
+  },
+  {
+   "id": "pack.perm/etc/at.allow",
+   "title": "/etc/at.allow not overly permissive",
+   "kind": "file_mode",
+   "path": "/etc/at.allow",
+   "max_mode": "640",
+   "severity": "LOW",
+   "rationale": "at.allow controls who may schedule 'at' jobs.",
+   "fix": "chmod 640 /etc/at.allow",
+   "refs": [
+    "CIS Linux Benchmark 6.1"
+   ]
+  },
+  {
+   "id": "pack.perm/etc/at.deny",
+   "title": "/etc/at.deny not overly permissive",
+   "kind": "file_mode",
+   "path": "/etc/at.deny",
+   "max_mode": "640",
+   "severity": "LOW",
+   "rationale": "at.deny is part of the same access decision.",
+   "fix": "chmod 640 /etc/at.deny",
+   "refs": [
+    "CIS Linux Benchmark 6.1"
+   ]
+  },
+  {
+   "id": "pack.perm/etc/hosts.allow",
+   "title": "/etc/hosts.allow not overly permissive",
+   "kind": "file_mode",
+   "path": "/etc/hosts.allow",
+   "max_mode": "644",
+   "severity": "LOW",
+   "rationale": "tcpwrappers policy file — shouldn't be world-writable.",
+   "fix": "chmod 644 /etc/hosts.allow",
+   "refs": [
+    "CIS Linux Benchmark 6.1"
+   ]
+  },
+  {
+   "id": "pack.perm/etc/hosts.deny",
+   "title": "/etc/hosts.deny not overly permissive",
+   "kind": "file_mode",
+   "path": "/etc/hosts.deny",
+   "max_mode": "644",
+   "severity": "LOW",
+   "rationale": "tcpwrappers deny file — shouldn't be world-writable.",
+   "fix": "chmod 644 /etc/hosts.deny",
+   "refs": [
+    "CIS Linux Benchmark 6.1"
+   ]
+  },
+  {
+   "id": "pack.perm/etc/motd",
+   "title": "/etc/motd not overly permissive",
+   "kind": "file_mode",
+   "path": "/etc/motd",
+   "max_mode": "644",
+   "severity": "LOW",
+   "rationale": "A writable login banner can be abused for social-engineering.",
+   "fix": "chmod 644 /etc/motd",
+   "refs": [
+    "CIS Linux Benchmark 6.1"
+   ]
+  },
+  {
+   "id": "pack.perm/etc/issue",
+   "title": "/etc/issue not overly permissive",
+   "kind": "file_mode",
+   "path": "/etc/issue",
+   "max_mode": "644",
+   "severity": "LOW",
+   "rationale": "A writable console banner can be abused likewise.",
+   "fix": "chmod 644 /etc/issue",
+   "refs": [
+    "CIS Linux Benchmark 6.1"
+   ]
+  },
+  {
+   "id": "pack.perm/etc/issue.net",
+   "title": "/etc/issue.net not overly permissive",
+   "kind": "file_mode",
+   "path": "/etc/issue.net",
+   "max_mode": "644",
+   "severity": "LOW",
+   "rationale": "A writable network banner can be abused likewise.",
+   "fix": "chmod 644 /etc/issue.net",
+   "refs": [
+    "CIS Linux Benchmark 6.1"
+   ]
+  },
+  {
+   "id": "pack.perm/boot/grub2/grub.cfg",
+   "title": "/boot/grub2/grub.cfg not overly permissive",
+   "kind": "file_mode",
+   "path": "/boot/grub2/grub.cfg",
+   "max_mode": "600",
+   "severity": "MEDIUM",
+   "rationale": "GRUB2 config leaks boot parameters and can hide a boot password; keep it root-only.",
+   "fix": "chmod 600 /boot/grub2/grub.cfg",
+   "refs": [
+    "CIS Linux Benchmark 6.1"
+   ]
+  }
+ ]
+}
