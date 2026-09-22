@@ -57,6 +57,21 @@ call-out when swap/zram spill is what's costing you frames), running daemons,
 the heaviest processes on RAM and CPU, and every readable temperature sensor.
 Read-only, air-gapped, writes nothing. In the GUI it's four slick tabs.
 
+## Duress (`murphy duress`)
+The dead-man's switch — for when you need to hand a device over, safely, right
+now. Disarmed, dry-run, and typed-consent-gated by default, same rule as
+`collapse`. The mechanism is cryptographic erasure — destroying the LUKS/Android
+FBE key — never a raw overwrite, so a wipe is instant rather than a slow scrub:
+
+| tier | what it does | reversible |
+|---|---|---|
+| **recommended** | panic lockdown — cut radios, lock the screen, kill sensitive sessions, disable ADB & biometrics | **yes** |
+| **advanced** | duress wipe — cryptographic erase of user data (a factory-reset / LUKS keyslot equivalent); the device stays usable and re-flashable | no |
+| **hellbreach** | scorched earth — `advanced`, then overwrite metadata/userdata (optional bootloader relock, off by default) | no, and can brick |
+
+Nothing fires without `--execute`, the exact typed consent phrase read on a real
+terminal, and an armed non-dry-run tier — three gates, same as `collapse`.
+
 ## Narrative Collapse (`murphy collapse`)
 The last page — for when the box is no longer yours to trust. Four doors, built
 the same disarmed, dry-run, typed-consent way as `duress`:
