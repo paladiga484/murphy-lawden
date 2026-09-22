@@ -42,8 +42,56 @@ murphy fix --su -y     autopilot — apply everything within the risk budget
 murphy fix --dry-run   show exactly what would change, touch nothing
 murphy av              antivirus: malware heuristics + a ClamAV signature scan
 murphy undo            roll back the most recent fix
+murphy overview        Narrative Overview — RAM, daemons, procs, temps, in plain words
+murphy collapse        Narrative Collapse — the four last-resort doors (gated)
+murphy spoof           rotate identifying creds (MAC / machine-id / hostname / tz)
+murphy ezopt           EZ-opt — debloat the box for gameplay (also: python ezopt.py)
+murphy gui             open the flat, no-gradient case room on 127.0.0.1
+murphy --incinerate …  delete the tool itself whole on exit (throwaway drops only)
 murphy --help          full help, including the four modes
 ```
+
+## Narrative Overview (`murphy overview`)
+A plain-language read of what the machine is doing *right now* — memory (with a
+call-out when swap/zram spill is what's costing you frames), running daemons,
+the heaviest processes on RAM and CPU, and every readable temperature sensor.
+Read-only, air-gapped, writes nothing. In the GUI it's four slick tabs.
+
+## Narrative Collapse (`murphy collapse`)
+The last page — for when the box is no longer yours to trust. Four doors, built
+the same disarmed, dry-run, typed-consent way as `duress`:
+
+| door | what it does | reversible |
+|---|---|---|
+| **reinstall** | delete the OS and start clean — writes a restore manifest, then hands the wipe to your install media (never `rm`s the running system) | no |
+| **cleanroom** | strip to a bare, trusted TTY (no desktop, radios, or listeners), then reset sudoers + stand up a fresh user — a swept floor to hunt rootkits from | strip yes, data wipe no |
+| **freeze** | `SIGSTOP` every non-essential process so nothing can act or phone home while you look | **yes** (`--thaw`) |
+| **sever** | cut Wi-Fi / BLE / all radios + network daemons + listeners behind a deny-all firewall — compartmentalise to an island | **yes** (`--restore`) |
+
+Nothing here runs on a scan, a timer, or by autopilot; firing a door needs a
+typed consent phrase on a real terminal. The GUI shows the plan only.
+
+## Cred spoofing (`murphy spoof`)
+Rotate the stable identifiers that let a network or app fingerprint *this exact
+box*: the NIC's **MAC**, `/etc/machine-id`, the **hostname** DHCP/mDNS leaks, and
+a decoy **timezone**. It rotates *your* identifiers on *your* hardware; the real
+values are backed up first and `murphy spoof restore --apply` puts them all back.
+Dry-run by default; only MAC works without root.
+
+## EZ-opt — debloat for gameplay (`ezopt`)
+A companion tool, same manners as Murphy (stdlib-only, reversible, amnesiac):
+`python ezopt.py` (or `murphy ezopt`) quiets the background for a game —
+stop/mask the daemons a session doesn't need, gaming-safe VM tuning
+(`vm.max_map_count` for Proton/anti-cheat, a one-shot cache drop), a
+`performance` CPU governor, and a low-latency I/O scheduler. Every facet is
+backed up before it's touched; `ezopt restore --apply` walks it all back.
+
+## Amnesia & self-incineration
+A scan already writes nothing. Now every run also **sweeps its own runtime
+traces** on exit — bytecode caches, temp scratch, the history line that named it.
+`--incinerate` (or `murphy incinerate`) escalates: as the process exits the tool
+**deletes itself whole** — but only from a self-contained drop; it refuses to
+touch a git checkout or a system install.
 
 ## Setup wizard (`--tui`)
 `murphy scan --tui` runs the whole review-and-choose flow full-screen (curses,

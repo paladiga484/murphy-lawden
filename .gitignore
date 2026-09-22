@@ -17,3 +17,8 @@ venv/
 .idea/
 *.swp
 .DS_Store
+
+# Built Magisk module - a build output, not source. Ship it as a release asset
+# rather than tracking it, or every rebuild adds another copy to history.
+murphy-hardening.zip
+murphy-hardening.zip.*

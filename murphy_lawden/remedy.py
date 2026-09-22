@@ -51,7 +51,8 @@ def _nix_scalar(value: str) -> str:
 #  Restore points
 # --------------------------------------------------------------------------- #
 def _state_dir() -> Path:
-    base = "/var/lib/murphy" if os.geteuid() == 0 else os.path.expanduser("~/.local/state/murphy")
+    is_root = hasattr(os, "geteuid") and os.geteuid() == 0  # geteuid is POSIX-only
+    base = "/var/lib/murphy" if is_root else os.path.expanduser("~/.local/state/murphy")
     return Path(base) / "restore"
 
 
@@ -119,12 +120,20 @@ class FixResult:
 
 
 def _set_directive(text: str, key: str, value: str) -> str:
-    """Set/replace a `Key Value` directive (sshd_config style), idempotently."""
-    pat = re.compile(rf"(?im)^\s*#?\s*{re.escape(key)}\b.*$")
+    """Set a `Key Value` directive (sshd_config style), idempotently.
+
+    Removes *every* prior occurrence of the key — commented templates and stale
+    active settings alike — then writes exactly one canonical directive, so the
+    value actually takes effect regardless of the daemon's first/last-wins
+    parsing and no duplicate is left behind. The directive is placed before the
+    first ``Match`` block so a global setting never lands inside a conditional."""
     line = f"{key} {value}"
-    if pat.search(text):
-        return pat.sub(line, text, count=1)
-    return (text.rstrip("\n") + "\n" + line + "\n") if text else line + "\n"
+    pat = re.compile(rf"(?i)^\s*#?\s*{re.escape(key)}\b.*$")
+    match_pat = re.compile(r"(?i)^\s*Match\b")
+    kept = [l for l in text.splitlines() if not pat.match(l)]
+    idx = next((i for i, l in enumerate(kept) if match_pat.match(l)), len(kept))
+    kept.insert(idx, line)
+    return "\n".join(kept) + "\n"
 
 
 def _ensure_line(text: str, line: str) -> str:
@@ -216,8 +225,14 @@ def undo_latest() -> tuple[bool, str]:
     if point is None:
         return False, "no restore point found — nothing to undo."
     data = json.loads((point / "journal.json").read_text())
-    # Reverse order: last change undone first.
-    for action in reversed(data["actions"]):
+    # Reverse order: last change undone first. But restore all state (files,
+    # modes) BEFORE re-running any recorded command — a remedy's undo_cmd is
+    # typically a service reload, and it must pick up the *restored* config, not
+    # the modified one it was reloaded against during the fix.
+    actions = list(reversed(data["actions"]))
+    file_ops = [a for a in actions if a.get("type") != "run"]
+    run_ops = [a for a in actions if a.get("type") == "run"]
+    for action in file_ops + run_ops:
         t = action["type"]
         try:
             if t == "restore_file":

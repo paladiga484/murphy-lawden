@@ -16,6 +16,7 @@ from . import __version__
 from . import checks_linux  # noqa: F401  (import registers the linux checks)
 from . import checks_malware  # noqa: F401  (import registers the malware/AV checks)
 from . import checks_android  # noqa: F401  (import registers the Android/su checks)
+from . import checks_firmware  # noqa: F401  (import registers the BIOS/UEFI checks)
 from .banner import Ink, WATERMARK, make_ink, render_banner, rule
 from .core import Finding, Severity, Status, detect_host, have, run_checks
 from .rules import load_pack, run_pack
@@ -240,8 +241,17 @@ A defensive system-hardening toolkit. By default it only *looks*: it profiles th
 host, runs a battery of read-only checks (SSH, firewall, kernel sysctls, accounts,
 file permissions, listening ports, disk/boot, systemd exposure) plus a vetted
 library of community check-packs, and files a graded report. Nothing is written to
-disk on a scan — Murphy is amnesiac. Taking action is always a separate, consented
-step ('fix'), every change is backed up, and 'undo' rolls the last job back.
+disk on a scan — Murphy is amnesiac, and now sweeps its own runtime traces as it
+exits (--incinerate deletes the tool itself whole on a throwaway drop). Taking
+action is always a separate, consented step ('fix'), every change is backed up,
+and 'undo' rolls the last job back.
+
+Beyond the audit: 'overview' is the Narrative Overview — a plain-language read of
+memory, daemons, processes and thermals. 'collapse' is the Narrative Collapse, a
+last-resort set of four doors (reinstall / cleanroom / freeze / sever) built like
+'duress' — dry-run and typed-consent-gated. 'spoof' rotates identifying creds
+(MAC, machine-id, hostname, timezone), reversibly. The companion tool EZ-opt
+('ezopt', or python ezopt.py) debloats the box for gameplay, also reversibly.
 """
 
 _HELP_EPILOG = """\
@@ -289,6 +299,17 @@ examples
   murphy --online --via tor   scan + pull extra packs anonymised over Tor
   murphy undo                 roll back the most recent fix
 
+  murphy overview             the Narrative Overview — RAM, daemons, procs, temps
+  murphy collapse             the Narrative Collapse — the four last-resort doors
+  murphy collapse --door freeze          plan a freeze (SIGSTOP all non-essential)
+  murphy collapse --door freeze --thaw --execute    resume everything again
+  murphy spoof                plan a full identity rotation (MAC/machine-id/host/tz)
+  murphy spoof --facet mac --apply       randomise the MAC (needs sudo)
+  murphy spoof restore --apply           put the real identity back
+  murphy ezopt                EZ-opt: plan the gaming debloat (or: python ezopt.py)
+  murphy ezopt --facet profile --apply   apply services+memory+cpu tuning
+  murphy --incinerate scan    scan, then delete the tool itself on exit (drops only)
+
   risk budget: --risk low|medium|high  (fixes above the budget are left untouched)
   amnesia:     scans write nothing; only 'fix' (with backups) and --save touch disk.
 """
@@ -301,12 +322,21 @@ def build_parser() -> argparse.ArgumentParser:
         description=_HELP_DESCRIPTION,
         epilog=_HELP_EPILOG)
     p.add_argument("command", nargs="?", default="scan",
-                   choices=["scan", "fix", "av", "undo", "panic", "version"],
+                   choices=["scan", "fix", "av", "watch", "gui", "module", "kill",
+                            "duress", "tweak", "undo", "panic", "version",
+                            "overview", "collapse", "spoof", "ezopt", "incinerate"],
                    help="scan (default) audits; fix takes action (asks first); "
                         "av runs the antivirus (heuristics + ClamAV); "
-                        "undo rolls back the last fix; panic runs the Android "
+                        "watch runs the optional sentinel daemon (alerts on posture "
+                        "drift); gui opens the local art-deco case room in your browser; "
+                        "module builds a systemless Magisk hardening module "
+                        "(Android); undo rolls back the last fix; panic runs the Android "
                         "mercenary-spyware (Pegasus) emergency-response flow; "
-                        "version prints the build.")
+                        "overview shows the Narrative Overview (RAM/daemons/procs/temps); "
+                        "collapse opens the Narrative Collapse last-resort doors; "
+                        "spoof rotates identifying creds (MAC/machine-id/hostname/tz); "
+                        "ezopt runs the EZ-opt gaming debloat; incinerate deletes the "
+                        "tool itself on exit; version prints the build.")
     # Two axes — network and privilege — compose into the four operating modes.
     p.add_argument("--mode", choices=["offline", "online", "su", "online-su"],
                    help="shorthand for the four modes. offline+unprivileged is the default.")
@@ -348,6 +378,77 @@ def build_parser() -> argparse.ArgumentParser:
     color.add_argument("--color", action="store_true", help="force ANSI colour.")
     p.add_argument("--save", metavar="FILE",
                    help="write the report to FILE — WARNING: breaks amnesia (leaves a trace on disk).")
+    # watch (sentinel daemon) options — all opt-in; watch writes nothing by default.
+    w = p.add_argument_group("watch (sentinel daemon)")
+    w.add_argument("--interval", type=int, default=300, metavar="SEC",
+                   help="watch: seconds between posture re-scans (default 300; min 30).")
+    w.add_argument("--once", action="store_true",
+                   help="watch: check drift once and exit (cron/systemd-timer friendly).")
+    w.add_argument("--notify", action="store_true",
+                   help="watch: also raise a desktop notification when posture regresses.")
+    w.add_argument("--state", metavar="DIR",
+                   help="watch: persist the baseline here so drift survives a restart "
+                        "(opt-in — this is the one thing that touches disk).")
+    w.add_argument("--install-service", action="store_true",
+                   help="watch: write an OPTIONAL systemd --user unit (not enabled for you).")
+    w.add_argument("--uninstall-service", action="store_true",
+                   help="watch: stop, disable, and remove that systemd --user unit.")
+    p.add_argument("--out", metavar="PATH",
+                   help="module: where to write the flashable zip (default: ./murphy-hardening.zip).")
+    p.add_argument("--port", type=int, default=8787, metavar="PORT",
+                   help="gui: loopback port for the case-room GUI (default 8787).")
+    p.add_argument("--no-open", action="store_true",
+                   help="gui: don't auto-open the browser (just print the URL).")
+    # duress (kill-switch / duress wipe / dead-man switch) — disarmed & dry-run by default.
+    du = p.add_argument_group("duress (last resort)")
+    du.add_argument("--tier", choices=["recommended", "advanced", "hellbreach"],
+                    help="duress: which tier to plan/fire (default: a safe briefing).")
+    du.add_argument("--execute", action="store_true",
+                    help="duress: actually fire (still requires the typed consent phrase).")
+    du.add_argument("--relock", action="store_true",
+                    help="duress/hellbreach: also relock the bootloader — CAN BRICK; off by default.")
+    du.add_argument("--arm", action="store_true", help="duress: arm the dead-man switch.")
+    du.add_argument("--deadman", metavar="DURATION",
+                    help="duress: dead-man window, e.g. 72h / 3d / 90m (default 72h).")
+    du.add_argument("--checkin", action="store_true", help="duress: reset the dead-man clock.")
+    du.add_argument("--disarm", action="store_true", help="duress: cancel the dead-man switch.")
+    du.add_argument("--tick", action="store_true",
+                    help="duress: internal — fire iff the dead-man deadline passed (for a timer).")
+    # tweak (the Library of Ruina)
+    tw = p.add_argument_group("tweak (Library of Ruina)")
+    tw.add_argument("--category", choices=["memory", "performance", "cache", "cleanup", "gaming", "storage"],
+                    help="tweak: only this category.")
+    tw.add_argument("--apply-tweaks", action="store_true",
+                    help="tweak: actually apply (asks per tweak unless -y; --su elevates for root ones).")
+
+    # collapse (the last resort)
+    co = p.add_argument_group("collapse (narrative collapse — last resort)")
+    co.add_argument("--door", choices=["reinstall", "cleanroom", "freeze", "sever"],
+                    help="collapse: which door to plan/fire. Omit for the briefing.")
+    co.add_argument("--thaw", action="store_true",
+                    help="collapse/freeze: resume every process the freeze stopped.")
+    co.add_argument("--restore", action="store_true",
+                    help="collapse/sever: reopen the trails (or spoof/ezopt: put identity/tuning back).")
+    co.add_argument("--wipe-data", action="store_true",
+                    help="collapse/cleanroom: also print the self-run data-wipe + new-user commands.")
+    co.add_argument("--manifest-dir", metavar="DIR",
+                    help="collapse/reinstall: where to write the restore manifest.")
+
+    # spoof (cred / identity spoofing) and ezopt (the optimiser) share --facet/--apply
+    sp = p.add_argument_group("spoof + ezopt (identity spoofing · gaming optimiser)")
+    sp.add_argument("--facet", metavar="NAME",
+                    help="spoof: mac|machineid|hostname|timezone|all|restore (default all). "
+                         "ezopt: profile|services|memory|cpu|io|restore (default profile).")
+    sp.add_argument("--apply", action="store_true",
+                    help="spoof/ezopt: actually apply (default is a plan that touches nothing).")
+    sp.add_argument("--iface", metavar="NAME", help="spoof/mac: only this interface.")
+    sp.add_argument("--new-hostname", metavar="NAME", help="spoof/hostname: use this name (else a neutral one).")
+    sp.add_argument("--tz", metavar="ZONE", help="spoof/timezone: decoy zone (default UTC).")
+
+    # amnesia
+    p.add_argument("--incinerate", action="store_true",
+                   help="on exit, delete the tool itself whole (only for a self-contained drop, "
+                        "never a git checkout or a system install).")
     return p
 
 
@@ -959,6 +1060,35 @@ def main(argv: list[str] | None = None) -> int:
     force_color = True if args.color else False if args.no_color else None
     ink = make_ink(force_color)
 
+    # Amnesia: arm the exit sweep for every run so Murphy leaves no runtime trace.
+    # --incinerate (or the `incinerate` command) escalates to a full self-delete,
+    # which selfwipe still refuses on a git checkout or a system install.
+    from .selfwipe import arm_amnesia
+    _burn = bool(getattr(args, "incinerate", False)) or args.command == "incinerate"
+    arm_amnesia(incinerate_on_exit=_burn, ink=ink)
+
+    if args.command == "incinerate":
+        print(ink.amber("murphy: incinerate armed — the tool deletes itself whole as this "
+                        "process exits (self-contained drops only; a checkout is spared)."))
+        return 0
+
+    if args.command == "overview":
+        from .overview import run_overview
+        return run_overview(ink)
+
+    if args.command == "collapse":
+        from .collapse import run_collapse
+        return run_collapse(args, ink)
+
+    if args.command == "spoof":
+        from .credspoof import run_spoof
+        return run_spoof(args, ink)
+
+    if args.command == "ezopt":
+        from .ezopt import run_ezopt
+        return run_ezopt(args.facet or "profile", bool(args.apply), ink=ink,
+                         banner=not args.no_banner)
+
     if args.command == "version":
         print(f"Murphy Lawden v{__version__} — {WATERMARK}")
         return 0
@@ -972,6 +1102,39 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "panic":
         from .panic import run_panic
         return run_panic(ink)
+
+    if args.command == "watch":
+        from .watch import run_watch
+        return run_watch(args, ink)
+
+    if args.command == "gui":
+        from .gui import serve
+        return serve(port=args.port, open_browser=not args.no_open, ink=ink)
+
+    if args.command in ("duress", "kill"):
+        from .duress import run_duress
+        if args.command == "kill":            # the kill-switch: instant reversible lockdown
+            args.tier, args.execute = "recommended", True
+        return run_duress(args, ink)
+
+    if args.command == "tweak":
+        from .tweaks import run_tweaks
+        # --su elevates so root tweaks can actually apply
+        if getattr(args, "apply_tweaks", False) and getattr(args, "su", False) \
+                and not (hasattr(os, "geteuid") and os.geteuid() == 0):
+            _elevate(argv if argv is not None else sys.argv[1:], ink)
+        return run_tweaks(args, ink)
+
+    if args.command == "module":
+        from . import magiskmod
+        out = magiskmod.build(args.out or "murphy-hardening.zip")
+        print(ink.green(f"✓ built {out}"))
+        print(ink.dim("  systemless + reversible — install it, reboot, done:"))
+        print(ink.cyan("    magisk --install-module ") + str(out)
+              + ink.dim("   (or flash it from the Magisk app)"))
+        print(ink.dim("  reverts fully when you disable/remove the module. "
+                      "Boot log: /data/adb/murphy/boot.log"))
+        return 0
 
     online, su = _resolve_mode(args)
 

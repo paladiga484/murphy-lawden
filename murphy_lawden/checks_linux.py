@@ -122,8 +122,9 @@ _SYSCTLS = [
      "Unrestricted ptrace lets a compromised process read secrets from its siblings."),
     ("net.ipv4.tcp_syncookies", "1", Severity.LOW,
      "SYN cookies keep the host answering during a SYN flood."),
-    ("net.ipv4.conf.all.rp_filter", "1", Severity.LOW,
-     "Reverse-path filtering drops spoofed source addresses."),
+    ("net.ipv4.conf.all.rp_filter", {"1", "2"}, Severity.LOW,
+     "Reverse-path filtering drops spoofed source addresses. Loose (2) counts "
+     "as well as strict (1); strict breaks VPNs and asymmetric routing."),
     ("net.ipv4.conf.all.accept_redirects", "0", Severity.MEDIUM,
      "Accepting ICMP redirects lets an attacker reroute your traffic."),
     ("net.ipv4.conf.all.accept_source_route", "0", Severity.MEDIUM,
