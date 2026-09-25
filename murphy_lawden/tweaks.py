@@ -13,6 +13,7 @@ marked so you know they don't "undo."
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from .core import have, run, read, detect_host
 
@@ -33,6 +34,24 @@ class Tweak:
     state: object = None              # optional: fn() -> str (current live state)
     applies: object = None            # optional: fn() -> bool (is it relevant here?)
     oneshot: bool = False             # a reclaim (no meaningful "undo")
+
+
+def _user_home() -> Path:
+    """The invoking user's home, even under sudo."""
+    import os
+    import pwd
+    user = os.environ.get("SUDO_USER")
+    if user and user != "root":
+        try:
+            return Path(pwd.getpwnam(user).pw_dir)
+        except KeyError:
+            pass
+    return Path.home()
+
+
+def _du(path: Path) -> str:
+    rc, out = run(["du", "-sh", str(path)])
+    return out.split("\t")[0].strip() if rc == 0 and out else "empty"
 
 
 def _sysctl_now_and_persist(key, value):
@@ -112,11 +131,14 @@ def _catalog(host) -> list:
               [["journalctl", "--vacuum-size=200M"]],
               reversible=False, oneshot=True,
               why="Logs grow unbounded; 200M keeps plenty of history without hoarding disk."),
-        Tweak("cache.user", "cache", "Clear your user cache (~/.cache, keeps app state)",
-              [["sh", "-c", "rm -rf ~/.cache/thumbnails/* ~/.cache/mesa_shader_cache_db/* 2>/dev/null; true"]],
+        # Under `--su` this runs as root, where `~` is /root — so name the real
+        # user's cache explicitly. Thumbnails only: a shader cache "regenerates"
+        # as stutter the next time each game compiles its shaders.
+        Tweak("cache.user", "cache", "Clear your thumbnail cache",
+              [["find", str(_user_home() / ".cache/thumbnails"), "-mindepth", "1", "-delete"]],
               root=False, reversible=False, oneshot=True,
-              why="Thumbnail and old shader caches regenerate; safe to clear.",
-              state=lambda: (run(["sh", "-c", "du -sh ~/.cache 2>/dev/null | cut -f1"])[1].strip() or "?")),
+              why="Thumbnails regenerate on demand. Shader caches are left alone on purpose.",
+              state=lambda: _du(_user_home() / ".cache/thumbnails")),
         Tweak("cache.coredumps", "cache", "Purge saved coredumps",
               [["sh", "-c", "rm -f /var/lib/systemd/coredump/* 2>/dev/null; true"]],
               reversible=False, oneshot=True,

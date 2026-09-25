@@ -8,11 +8,12 @@ machine leans into the game you're about to launch.
 It works in facets, and every facet backs up what it touches before it touches
 it, so ``ezopt restore`` puts the machine back exactly as it was:
 
-  services   stop + mask the daemons a game doesn't need (printing, discovery,
-             indexers, Bluetooth) so nothing wakes mid-match. Reversed by unmask.
+  services   stop + runtime-mask the daemons a game doesn't need (printing,
+             discovery, indexers, Bluetooth) so nothing wakes mid-match. The mask
+             lives in /run, so a reboot undoes it even if you never restore.
   memory     kernel VM tuning that helps games specifically — a big
-             ``vm.max_map_count`` (many modern/Proton titles need it), calmer
-             dirty-writeback, and a one-shot cache drop to hand RAM back.
+             ``vm.max_map_count`` (many modern/Proton titles need it) and no
+             background compaction. No cache drop: it evicts the game's own files.
   cpu        pin the CPU governor to ``performance`` so it doesn't downclock
              between frames. Backed up per-core; restore returns your governor.
   io         give the disk your game lives on a low-latency I/O scheduler.
@@ -26,19 +27,37 @@ from __future__ import annotations
 
 import json
 import os
+import pwd
 from pathlib import Path
 
 from .core import have, run
 from .banner import Ink, render_banner, rule, make_ink
 
-BACKUP = Path.home() / ".local/state/murphy/ezopt.backup.json"
+def _real_home() -> Path:
+    """The invoking user's home even under sudo — so `sudo ezopt --apply` and
+    `sudo ezopt restore` agree on one ledger instead of writing it to /root."""
+    user = os.environ.get("SUDO_USER")
+    if user and user != "root":
+        try:
+            return Path(pwd.getpwnam(user).pw_dir)
+        except KeyError:
+            pass
+    return Path.home()
+
+
+BACKUP = _real_home() / ".local/state/murphy/ezopt.backup.json"
 
 # Daemons a game never needs mid-session. Conservative: nothing here breaks a
 # desktop's ability to boot or the network you play online over.
+# Sockets are listed with their services: masking a socket-activated daemon
+# while its socket still listens just means the next connection restarts it.
 _BLOAT_SERVICES = [
-    "cups", "cups-browsed", "bluetooth", "avahi-daemon", "ModemManager",
-    "packagekit", "tracker-miner-fs-3", "tracker-extract-3", "geoclue",
-    "smartd", "libvirtd", "docker",
+    "cups.service", "cups.socket", "cups-browsed.service", "bluetooth.service",
+    "avahi-daemon.service", "avahi-daemon.socket", "ModemManager.service",
+    "packagekit.service", "tracker-miner-fs-3.service", "tracker-extract-3.service",
+    "geoclue.service", "smartd.service",
+    "libvirtd.service", "libvirtd.socket", "libvirtd-ro.socket", "libvirtd-admin.socket",
+    "docker.service", "docker.socket",
 ]
 
 # VM knobs that actually move frames — and *only* ones with no hidden interaction
@@ -63,11 +82,32 @@ def _load() -> dict:
 
 
 def _save(patch: dict) -> None:
+    """Merge into the ledger, keeping the FIRST recorded original of every
+    individual entry. (It used to setdefault the whole section, so anything a
+    second run touched was never recorded and could never be restored.)"""
     BACKUP.parent.mkdir(parents=True, exist_ok=True)
     cur = _load()
     for k, v in patch.items():
-        cur.setdefault(k, v)   # keep the FIRST (real) value only
-    BACKUP.write_text(json.dumps(cur, indent=2))
+        if isinstance(v, dict):
+            section = cur.setdefault(k, {})
+            for kk, vv in v.items():
+                section.setdefault(kk, vv)
+        else:
+            cur.setdefault(k, v)
+    _write(cur)
+
+
+def _write(ledger: dict) -> None:
+    BACKUP.parent.mkdir(parents=True, exist_ok=True)
+    BACKUP.write_text(json.dumps(ledger, indent=2))
+    user = os.environ.get("SUDO_USER")
+    if user and _is_root():                     # keep it the user's file, not root's
+        try:
+            pw = pwd.getpwnam(user)
+            for path in (BACKUP.parent, BACKUP):
+                os.chown(path, pw.pw_uid, pw.pw_gid)
+        except (KeyError, OSError):
+            pass
     # NOTE: do NOT register this with the amnesia sweep. It is the restore ledger,
     # not disposable scratch — it must survive process exit so `ezopt restore` can
     # walk changes back on a later run. (Same reasoning as Murphy's fix backups,
@@ -93,23 +133,28 @@ def opt_services(ink: Ink, execute: bool) -> int:
     if execute and not _is_root():
         print(ink.amber("    masking services needs root — re-run with sudo."))
         return 1
-    masked = []
+    masked = {}
     for unit in _BLOAT_SERVICES:
-        rc, _ = run(["systemctl", "status", unit + ".service"])
+        rc, _ = run(["systemctl", "status", unit])
         if rc == 4:      # 4 == no such unit; skip cleanly
             continue
-        was_enabled = run(["systemctl", "is-enabled", "--quiet", unit])[0] == 0
+        state = run(["systemctl", "is-enabled", unit])[1].strip()
+        if state.startswith("masked"):
+            continue     # already masked by someone else — not ours to undo
+        was = {"enabled": state == "enabled",
+               "active": run(["systemctl", "is-active", "--quiet", unit])[0] == 0}
         if not execute:
-            _line(ink, execute, True, f"stop + mask {unit}")
+            _line(ink, execute, True, f"stop + mask {unit} until reboot")
             continue
-        run(["systemctl", "stop", unit])
-        ok = run(["systemctl", "mask", unit])[0] == 0
-        _line(ink, execute, ok, f"stop + mask {unit}")
-        if ok and was_enabled:
-            masked.append(unit)
+        # --runtime: the mask lives in /run and dies with the boot. Forgetting
+        # `restore` costs you one session of Bluetooth, not every session after.
+        ok = run(["systemctl", "mask", "--runtime", "--now", unit])[0] == 0
+        _line(ink, execute, ok, f"stop + mask {unit} until reboot")
+        if ok:
+            masked[unit] = was   # record every unit we mask, enabled or not
     if execute and masked:
-        _save({"masked_services": masked})
-    print(ink.dim("    ↩ restore brings these back (unmask + re-enable what was on)."))
+        _save({"masked_units": masked, "boot_id": _boot_id()})
+    print(ink.dim("    ↩ restore brings these back; a reboot does too."))
     return 0
 
 
@@ -139,16 +184,9 @@ def opt_memory(ink: Ink, execute: bool) -> int:
             _line(ink, execute, True, f"set {key} = {val}  (was {cur})")
         except OSError as e:
             _line(ink, execute, False, f"{key}: {e}")
-    # one-shot: hand cached pages back to the game
-    if execute and _is_root():
-        try:
-            os.sync()
-            Path("/proc/sys/vm/drop_caches").write_text("3")
-            _line(ink, execute, True, "dropped page/dentry/inode caches (one-shot)")
-        except OSError:
-            pass
-    else:
-        _line(ink, execute, True, "drop caches once to free RAM (one-shot)")
+    # No drop_caches: it throws away the game's own file and shader cache (which
+    # then comes back as stutter) and does nothing for anonymous pages in zram,
+    # which is where the pressure on a small-RAM box actually is.
     if execute and backup:
         _save({"sysctl": backup})
     return 0
@@ -228,6 +266,13 @@ def opt_io(ink: Ink, execute: bool) -> int:
 # --------------------------------------------------------------------------- #
 #  restore
 # --------------------------------------------------------------------------- #
+def _boot_id() -> str:
+    try:
+        return Path("/proc/sys/kernel/random/boot_id").read_text().strip()
+    except OSError:
+        return ""
+
+
 def opt_restore(ink: Ink, execute: bool) -> int:
     print(rule(ink, "RESTORE — put the machine back"))
     bk = _load()
@@ -235,41 +280,57 @@ def opt_restore(ink: Ink, execute: bool) -> int:
         print(ink.amber("    nothing on record — EZ-opt hasn't changed anything yet."))
         return 0
     if execute and not _is_root():
-        print(ink.amber("    restore needs root for most facets — re-run with sudo."))
-    for unit in bk.get("masked_services", []):
+        # Refuse up front. Running on without root used to fail every step and
+        # then delete the ledger anyway, leaving nothing to restore from.
+        print(ink.amber("    restore needs root — re-run with sudo. The ledger is untouched."))
+        return 1
+    left: dict = {}
+    fresh_boot = bk.get("boot_id") and bk.get("boot_id") != _boot_id()
+
+    units = dict(bk.get("masked_units", {}))
+    for unit in bk.get("masked_services", []):        # ledgers from older versions
+        units.setdefault(unit if "." in unit else unit + ".service",
+                         {"enabled": True, "active": True, "legacy": True})
+    for unit, was in units.items():
+        verb = "unmask" + (" + start" if was.get("active") else "")
         if not execute:
-            _line(ink, execute, True, f"unmask + enable {unit}")
+            _line(ink, execute, True, f"{verb} {unit}")
             continue
-        run(["systemctl", "unmask", unit])
-        ok = run(["systemctl", "enable", "--now", unit])[0] == 0
-        _line(ink, execute, ok, f"unmask + enable {unit}")
-    for key, val in bk.get("sysctl", {}).items():
-        path = "/proc/sys/" + key.replace(".", "/")
-        if execute:
-            try:
-                Path(path).write_text(val)
-                _line(ink, execute, True, f"{key} → {val}")
-            except OSError:
-                _line(ink, execute, False, f"{key}")
-        else:
-            _line(ink, execute, True, f"{key} → {val}")
-    for path, val in bk.get("governors", {}).items():
-        if execute:
-            try:
-                Path(path).write_text(val)
-            except OSError:
-                pass
-    if bk.get("governors"):
-        _line(ink, execute, True, f"governors → original ({len(bk['governors'])} cores)")
-    for path, val in bk.get("io_sched", {}).items():
-        if execute:
-            try:
-                Path(path).write_text(val)
-            except OSError:
-                pass
-    if bk.get("io_sched"):
-        _line(ink, execute, True, "I/O schedulers → original")
+        # a pre-runtime ledger masked in /etc; a runtime mask may already be gone
+        cmd = ["systemctl", "unmask", unit] if was.get("legacy") else \
+              ["systemctl", "unmask", "--runtime", unit]
+        ok = run(cmd)[0] == 0 or fresh_boot
+        if ok and was.get("legacy") and was.get("enabled"):
+            ok = run(["systemctl", "enable", unit])[0] == 0
+        if ok and was.get("active"):
+            ok = run(["systemctl", "start", unit])[0] == 0
+        _line(ink, execute, ok, f"{verb} {unit}")
+        if not ok:
+            left.setdefault("masked_units", {})[unit] = was
+
+    for section, label in (("sysctl", None), ("governors", "governors"), ("io_sched", "I/O schedulers")):
+        items = bk.get(section, {})
+        failed = {}
+        for key, val in items.items():
+            path = "/proc/sys/" + key.replace(".", "/") if section == "sysctl" else key
+            if execute:
+                try:
+                    Path(path).write_text(val)
+                except OSError:
+                    failed[key] = val
+            if section == "sysctl":
+                _line(ink, execute, key not in failed, f"{key} → {val}")
+        if items and label:
+            _line(ink, execute, not failed, f"{label} → original ({len(items)})")
+        if failed:
+            left[section] = failed
+
     if execute:
+        if left:
+            _write(left)
+            print(ink.amber(f"    {sum(len(v) for v in left.values())} item(s) didn't restore; "
+                            "they stay on the ledger for the next run."))
+            return 1
         BACKUP.unlink(missing_ok=True)
         print(ink.green("    Restored. EZ-opt's slate is clean."))
     return 0
