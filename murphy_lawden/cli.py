@@ -308,6 +308,8 @@ examples
   murphy spoof restore --apply           put the real identity back
   murphy ezopt                EZ-opt: plan the gaming debloat (or: python ezopt.py)
   murphy ezopt --facet profile --apply   apply services+memory+cpu tuning
+  murphy clean                survey the junk (pacman cache, coredumps, trash…); changes nothing
+  murphy clean --apply        sweep it (sudo per root step; never shader caches or Downloads)
   murphy --incinerate scan    scan, then delete the tool itself on exit (drops only)
 
   risk budget: --risk low|medium|high  (fixes above the budget are left untouched)
@@ -324,7 +326,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("command", nargs="?", default="scan",
                    choices=["scan", "fix", "av", "watch", "gui", "module", "kill",
                             "duress", "tweak", "undo", "panic", "version",
-                            "overview", "collapse", "spoof", "ezopt", "incinerate"],
+                            "overview", "collapse", "spoof", "ezopt", "clean", "incinerate"],
                    help="scan (default) audits; fix takes action (asks first); "
                         "av runs the antivirus (heuristics + ClamAV); "
                         "watch runs the optional sentinel daemon (alerts on posture "
@@ -335,7 +337,7 @@ def build_parser() -> argparse.ArgumentParser:
                         "overview shows the Narrative Overview (RAM/daemons/procs/temps); "
                         "collapse opens the Narrative Collapse last-resort doors; "
                         "spoof rotates identifying creds (MAC/machine-id/hostname/tz); "
-                        "ezopt runs the EZ-opt gaming debloat; incinerate deletes the "
+                        "ezopt runs the EZ-opt gaming debloat; clean sweeps system junk; incinerate deletes the "
                         "tool itself on exit; version prints the build.")
     # Two axes — network and privilege — compose into the four operating modes.
     p.add_argument("--mode", choices=["offline", "online", "su", "online-su"],
@@ -440,7 +442,9 @@ def build_parser() -> argparse.ArgumentParser:
                     help="spoof: mac|machineid|hostname|timezone|all|restore (default all). "
                          "ezopt: profile|services|memory|cpu|io|restore (default profile).")
     sp.add_argument("--apply", action="store_true",
-                    help="spoof/ezopt: actually apply (default is a plan that touches nothing).")
+                    help="spoof/ezopt/clean: actually apply (default is a plan that touches nothing).")
+    sp.add_argument("--deep", action="store_true",
+                    help="clean: keep only 1 cached version of each package (drops the downgrade path).")
     sp.add_argument("--iface", metavar="NAME", help="spoof/mac: only this interface.")
     sp.add_argument("--new-hostname", metavar="NAME", help="spoof/hostname: use this name (else a neutral one).")
     sp.add_argument("--tz", metavar="ZONE", help="spoof/timezone: decoy zone (default UTC).")
@@ -1088,6 +1092,10 @@ def main(argv: list[str] | None = None) -> int:
         from .ezopt import run_ezopt
         return run_ezopt(args.facet or "profile", bool(args.apply), ink=ink,
                          banner=not args.no_banner)
+
+    if args.command == "clean":
+        from .clean import run_clean
+        return run_clean(bool(args.apply), bool(args.deep), ink)
 
     if args.command == "version":
         print(f"Murphy Lawden v{__version__} — {WATERMARK}")

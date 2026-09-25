@@ -46,6 +46,7 @@ murphy overview        Narrative Overview — RAM, daemons, procs, temps, in pla
 murphy collapse        Narrative Collapse — the four last-resort doors (gated)
 murphy spoof           rotate identifying creds (MAC / machine-id / hostname / tz)
 murphy ezopt           EZ-opt — debloat the box for gameplay (also: python ezopt.py)
+murphy clean           survey the junk; `--apply` sweeps it (never shader caches or Downloads)
 murphy gui             open the flat, no-gradient case room on 127.0.0.1
 murphy --incinerate …  delete the tool itself whole on exit (throwaway drops only)
 murphy --help          full help, including the four modes
