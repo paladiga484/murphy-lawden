@@ -118,6 +118,19 @@ def _finding(rule: dict, status: Status, detail: str = "") -> Finding:
     )
 
 
+def _pkg_owner(path: str) -> str | None:
+    """Package that owns *path* (and, for a symlink, its target too), else None."""
+    real = os.path.realpath(path)
+    queries = [["pacman", "-Qqo"], ["dpkg", "-S"], ["rpm", "-qf", "--qf", "%{NAME}"]]
+    for q in queries:
+        rc, out = run([*q, real])
+        if rc == 0 and out.strip():
+            if os.path.islink(path) and run([*q, path])[0] != 0:
+                return None  # link planted beside a genuine target
+            return out.strip().splitlines()[0].split(":")[0]
+    return None
+
+
 def _eval(rule: dict) -> Finding:
     kind = rule.get("kind")
 
@@ -145,6 +158,13 @@ def _eval(rule: dict) -> Finding:
     if kind == "path_exists":
         should = rule.get("should_exist", True)
         exists = os.path.exists(rule["path"])
+        # An IOC path that the package manager owns is the genuine file, not the
+        # implant (e.g. Arch's /lib -> usr/lib makes systemd's libudev.so match
+        # the XorDDoS marker). Legacy-client rules still fail: owned is the point.
+        if exists and not should and str(rule.get("id", "")).startswith("pack.ioc"):
+            owner = _pkg_owner(rule["path"])
+            if owner:
+                return _finding(rule, Status.PASS, f"exists, owned by package {owner}")
         return _finding(rule, Status.PASS if exists == should else Status.FAIL,
                         f"exists={exists} expected={should}")
 

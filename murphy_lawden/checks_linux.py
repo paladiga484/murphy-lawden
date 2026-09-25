@@ -92,6 +92,18 @@ def firewall(host: Host) -> Iterable[Finding]:
         rc, out = run(["firewall-cmd", "--state"])
         if out.strip() == "running":
             active, how = True, "firewalld"
+    # Every probe above needs root; unprivileged they all come back empty, which
+    # used to read as "no firewall". The service state is readable by anyone.
+    if not active and have("systemctl"):
+        for unit in ("ufw", "firewalld", "nftables"):
+            if run(["systemctl", "is-active", "--quiet", unit])[0] == 0:
+                active, how = True, f"{unit} service active; rules need root to inspect"
+                break
+    if not active and not host.is_root:
+        yield _f("net.firewall", "Host firewall state unknown", Status.SKIP, Severity.HIGH,
+                 detail="no firewall service found and the ruleset needs root to read "
+                        "(run 'murphy scan --su').")
+        return
 
     if active:
         yield _f("net.firewall", f"Host firewall active ({how})", Status.PASS, Severity.HIGH,
@@ -291,31 +303,6 @@ def disk_encryption(host: Host) -> Iterable[Finding]:
                  rationale="Without full-disk encryption, physical access = data access "
                            "(the stolen-laptop / seized-server scenario).",
                  fix="Use LUKS full-disk encryption. (Retrofitting requires reinstall/migration.)")
-
-
-@check("linux")
-def secure_boot(host: Host) -> Iterable[Finding]:
-    if not os.path.exists("/sys/firmware/efi"):
-        yield _f("boot.secureboot", "Secure Boot check", Status.SKIP, detail="legacy BIOS boot (no EFI)")
-        return
-    state = None
-    if have("mokutil"):
-        rc, out = run(["mokutil", "--sb-state"])
-        if rc == 0:
-            state = "enabled" if "enabled" in out.lower() else "disabled"
-    if state is None:
-        var = glob.glob("/sys/firmware/efi/efivars/SecureBoot-*")
-        if var:
-            data = Path(var[0]).read_bytes() if os.access(var[0], os.R_OK) else b""
-            state = "enabled" if data[-1:] == b"\x01" else "disabled" if data else None
-    if state == "enabled":
-        yield _f("boot.secureboot", "Secure Boot enabled", Status.PASS, Severity.LOW)
-    elif state == "disabled":
-        yield _f("boot.secureboot", "Secure Boot is disabled", Status.WARN, Severity.LOW,
-                 rationale="Secure Boot blocks unsigned bootloaders/kernels — a bootkit defence.",
-                 fix="Enable Secure Boot in firmware (may require signing your kernel/shim).")
-    else:
-        yield _f("boot.secureboot", "Secure Boot state undetermined", Status.SKIP)
 
 
 # --------------------------------------------------------------------------- #
