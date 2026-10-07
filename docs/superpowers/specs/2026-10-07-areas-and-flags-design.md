@@ -70,7 +70,7 @@ The positional word, the short flag and the long flag are the same command:
 | area        | aliases                     | covers                                               | today's code |
 |-------------|-----------------------------|------------------------------------------------------|--------------|
 | `cage`      | isolate, sandbox, torrents  | compartmentalization: app/download/game sandboxes    | `ds/`        |
-| `net`       | wifi, firewall, fw, vpn, dns| wifi, firewall, DNS, VPN kill switch, MAC            | `net.*`, `fw.*` checks, `ds/net.py`, spoof MAC |
+| `net`       | wifi, firewall, vpn, dns    | wifi, firewall, DNS, VPN kill switch, MAC            | `net.*` checks (incl. `net.firewall`), `ds/net.py`, spoof MAC |
 | `ssh`       |                             | sshd + client config, keys                           | `ssh.*` checks |
 | `users`     | accounts, sudo, login       | users, sudo, PAM, passwords                          | `acct.*`, `sudo.*` |
 | `kernel`    | sysctl, boot                | sysctls, lockdown, modules, cmdline                  | `kernel.*`, sysctl fixes |
@@ -78,11 +78,11 @@ The positional word, the short flag and the long flag are the same command:
 | `apps`      | debloat, services           | services, autostart, telemetry                       | `ezopt`, `tweak` |
 | `privacy`   | identity, spoof             | machine-id, hostname, timezone, fingerprint          | `credspoof.py` |
 | `virus`     | av, malware                 | heuristics, ClamAV, IOC packs                        | `mal.*`, `pack.ioc*`, `clamav.py` |
-| `firmware`  | uefi, bios                  | Secure Boot state, firmware checks                   | `checks_firmware.py` |
+| `firmware`  | uefi, bios                  | Secure Boot state, firmware checks                   | `fw.*` checks, `checks_firmware.py` |
 | `phone`     | android, magisk             | Android / Magisk                                     | `android.*`, `magiskmod.py` |
 | `emergency` | panic, duress, collapse     | panic, duress, collapse, self-wipe                   | as is |
 
-Existing checks are routed to areas by their finding-id prefix (`ssh.` → ssh, `fw.`/`net.` → net,
+Existing checks are routed to areas by their finding-id prefix (`ssh.` → ssh, `net.` → net, `fw.` → firmware,
 `acct.`/`sudo.` → users, `mal.`/`pack.ioc` → virus, `android.` → phone, ...). A check with no
 mapped prefix lands in a `misc` area and a unit test fails, so nothing is silently unrouted.
 
