@@ -310,6 +310,8 @@ examples
   murphy ezopt --facet profile --apply   apply services+memory+cpu tuning
   murphy clean                survey the junk (pacman cache, coredumps, trash…); changes nothing
   murphy clean --apply        sweep it (sudo per root step; never shader caches or Downloads)
+  murphy ds check X.torrent   judge a torrent/magnet before downloading (`murphy ds -h` for all)
+  murphy ds lock              the torrent folder where nothing runs; `ds run` = the no-network cage
   murphy --incinerate scan    scan, then delete the tool itself on exit (drops only)
 
   risk budget: --risk low|medium|high  (fixes above the budget are left untouched)
@@ -326,7 +328,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("command", nargs="?", default="scan",
                    choices=["scan", "fix", "av", "watch", "gui", "module", "kill",
                             "duress", "tweak", "undo", "panic", "version",
-                            "overview", "collapse", "spoof", "ezopt", "clean", "incinerate"],
+                            "overview", "collapse", "spoof", "ezopt", "clean", "ds", "incinerate"],
                    help="scan (default) audits; fix takes action (asks first); "
                         "av runs the antivirus (heuristics + ClamAV); "
                         "watch runs the optional sentinel daemon (alerts on posture "
@@ -337,7 +339,8 @@ def build_parser() -> argparse.ArgumentParser:
                         "overview shows the Narrative Overview (RAM/daemons/procs/temps); "
                         "collapse opens the Narrative Collapse last-resort doors; "
                         "spoof rotates identifying creds (MAC/machine-id/hostname/tz); "
-                        "ezopt runs the EZ-opt gaming debloat; clean sweeps system junk; incinerate deletes the "
+                        "ezopt runs the EZ-opt gaming debloat; clean sweeps system junk; ds is download "
+                        "security for torrents/magnets (see `murphy ds -h`); incinerate deletes the "
                         "tool itself on exit; version prints the build.")
     # Two axes — network and privilege — compose into the four operating modes.
     p.add_argument("--mode", choices=["offline", "online", "su", "online-su"],
@@ -1039,13 +1042,17 @@ def _wizard(ink: Ink) -> int:
     print(f"   {ink.green('2')}  {ink.bone('Review')}     {ink.dim('the same scan in a full-screen wizard (--tui)')}")
     print(f"   {ink.green('3')}  {ink.bone('Antivirus')}  {ink.dim('malware heuristics + a ClamAV signature sweep')}")
     print(f"   {ink.green('4')}  {ink.bone('Undo')}       {ink.dim('roll back the most recent fix')}")
+    print(f"   {ink.green('5')}  {ink.bone('Torrents')}   {ink.dim('download safely: VPN, checks, and the cage to run things in')}")
     print(f"   {ink.dim('0')}  {ink.dim('Leave')}")
     print("  " + ink.dim("nothing is written until you choose to fix — a scan leaves no trace."))
     try:
-        choice = input("  " + ink.cyan("choose [0-4]: ")).strip().lower()
+        choice = input("  " + ink.cyan("choose [0-5]: ")).strip().lower()
     except EOFError:
         print()
         return 0
+    if choice == "5":
+        print()
+        return main(["ds"])
     route = {"1": ["scan"], "2": ["scan", "--tui"], "3": ["av"], "4": ["undo"]}.get(choice)
     if route is None:
         print("  " + ink.dim("Left as-is — Murphy didn't touch a thing."))
@@ -1060,6 +1067,13 @@ def main(argv: list[str] | None = None) -> int:
     # `murphy fix --su`, …) skips it and behaves exactly as before.
     if argv is None and not sys.argv[1:] and sys.stdin.isatty() and sys.stdout.isatty():
         return _wizard(make_ink(None))
+    raw = list(sys.argv[1:] if argv is None else argv)
+    if raw[:1] == ["ds"]:                 # its own sub-commands and flags
+        from .selfwipe import arm_amnesia
+        from .ds import run_ds
+        ink = make_ink(None)
+        arm_amnesia(ink=ink)
+        return run_ds(raw[1:], ink)
     args = build_parser().parse_args(argv)
     force_color = True if args.color else False if args.no_color else None
     ink = make_ink(force_color)

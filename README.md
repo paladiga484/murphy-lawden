@@ -47,10 +47,104 @@ murphy collapse        Narrative Collapse — the four last-resort doors (gated)
 murphy spoof           rotate identifying creds (MAC / machine-id / hostname / tz)
 murphy ezopt           EZ-opt — debloat the box for gameplay (also: python ezopt.py)
 murphy clean           survey the junk; `--apply` sweeps it (never shader caches or Downloads)
+murphy ds …            download security for torrents/magnets — see below
 murphy gui             open the flat, no-gradient case room on 127.0.0.1
 murphy --incinerate …  delete the tool itself whole on exit (throwaway drops only)
 murphy --help          full help, including the four modes
 ```
+
+## Download security (`murphy ds`)
+For torrents and magnets, on Linux and Windows. The promise, stated plainly:
+**nothing from the torrent folder runs except inside a cage with no network, no
+view of your home, and one writable output folder.** A file can't be forbidden
+from making web requests — only a running process can — so the cage is what does it.
+
+```
+murphy ds                           the menu — everything picked by number, no paths to type
+murphy ds go                        get ready: VPN up, qBittorrent tied to it, folder watched
+murphy ds check X.torrent|magnet:…  judge the file list before a byte downloads
+murphy ds scan [PATH] [--apply]     names + headers + ClamAV/Defender; --apply quarantines
+murphy ds extract ARCHIVE           unpack inside the cage, then scan what came out
+murphy ds run FILE [--with-dir]     run it caged (--gui = Wayland window, --gpu = GPU, --proton = game)
+murphy ds lock | unlock | status    the locked folder and the routes around it
+murphy ds quarantine                what scan --apply moved away (never deleted)
+murphy ds autoscan --install        scan every finished download as it lands; notify the verdict
+```
+
+**The menu and `go`:** bare `murphy ds` lists the `.torrent` files you have and
+what has been downloaded, and you pick by number; each choice prints the real
+command before running it. `ds go` finds whatever VPN the machine has — Mullvad,
+Proton VPN, IVPN, NordVPN, Windscribe, PIA, ExpressVPN, Eddie, plain
+WireGuard/OpenVPN — on PATH, under Program Files (Windows) or in /Applications
+(macOS). If a tunnel is already up it uses it; if not it connects one (by CLI
+where there is one, otherwise it opens the app and waits). It never runs two at
+once. Then it binds qBittorrent to that tunnel, so a dropped VPN stops torrents
+instead of leaking your IP, turns autoscan on, and opens qBittorrent — which it
+refuses to do with no VPN and no binding. The tunnel is read from
+`/sys/class/net` on Linux, `Get-NetAdapter` on Windows, and the route to a public
+address on macOS/BSD. Only the Linux path has been run; the cage itself is still
+Linux (bubblewrap) and Windows (Sandbox) only.
+
+**check** flags double extensions (`movie.mkv.exe`), right-to-left-override
+names, `../` paths, `.lnk`/`.scr`/`.hta` and friends, executables inside a
+film/series/music release, archive + password-file droppers, "videos" too small
+to be the film, and web seeds. A magnet has no file list until the swarm sends
+metadata; Murphy won't join the swarm for you (it announces your IP), but reads
+qBittorrent's cached copy if it already has one.
+
+**The cage (Linux, bubblewrap):** its own empty network namespace (loopback
+only, no DNS, no host abstract sockets), `/home` an empty tmpfs, the OS
+read-only, no `/run` (no D-Bus, systemd, pipewire — sound only via `--audio`), no new user namespaces, a
+new session, a memory/task ceiling, no display unless `--gui` (Wayland only —
+never X11). Windows programs get a throwaway Wine prefix that dies with the run.
+A system-call filter (seccomp, built by hand — no libseccomp) makes the kernel refuse
+what exploits use and games don't: BPF, io_uring, perf, userfaultfd, keyrings, mounts,
+module/kexec loading, raw I/O ports — for both 64-bit and 32-bit x86 calls. The cage
+also gets a made-up `/etc/machine-id` (stable per kept prefix) and hostname, and with
+`--gpu` the disk serials, network cards, firmware and DMI tables are hidden from `/sys`. Landlock
+allows starting programs only from the read-only system, Proton and the program's own
+copy — a native Linux payload dropped by a Windows .exe into /tmp, its prefix or the
+output folder can be written but never run.
+
+**Games (`--proton`):** `murphy ds run setup.exe --with-dir --proton --gui --gpu`
+runs it under a Proton build Steam already has (newest GE-Proton; `--proton-build
+dwproton` picks another), mounted read-only, in the same cage. The prefix is *kept*
+in `<output folder>/prefix` — installs, saves, shader cache — so point `ds run` at
+the installed `…/prefix/pfx/drive_c/…/game.exe` next time and it reuses it. Delete
+the output folder to forget the game. No controllers (no `/dev/input`), no
+Steam, and nothing that needs to phone home.
+
+**Sound (`--audio`):** the desktop's audio socket lets a client record the
+microphone, capture other programs and load server modules, so the cage never
+gets it. `--audio` starts a private pipewire-pulse for the run — module loading
+off, recording and volume changes blocked for every client — and probes it before
+handing it over; if a module still loads or a recording still opens, it refuses.
+
+**Saves beside the .exe (`--writable`):** with `--with-dir` the game's folder is
+mounted writable instead of read-only, for games that save into their own folder
+(RPG Maker, most old games). It can then also change or delete its own files.
+
+**lock** (Linux): `~/Torrents` bind-mounted `noexec,nosuid,nodev`; Wine's binfmt
+handler off; a `~/.local/bin/wine` shim that sends `wine <file in the folder>`
+to the cage (noexec can't stop Wine — it reads the file); double-clicked Windows
+programs open the cage; qBittorrent saves there, excludes never-legit types,
+appends `.!qB` to partials, requires encryption, stops UPnP. qBittorrent must be
+closed while it edits the config. **lock** (Windows): deny-Execute ACL on the
+folder, Controlled Folder Access, PUA blocking, ASR rules (droppers,
+obfuscated scripts, ransomware, WMI persistence, vulnerable drivers, LSASS theft;
+unknown executables in Warn so your own builds aren't blocked), Mark-of-the-Web
+on downloads. `ds run` uses Windows Sandbox with networking off — Pro/Enterprise
+only; on Home it refuses rather than run uncaged. The Windows path is written to
+Microsoft's docs and has not been run on a Windows box yet.
+
+Every change goes into `~/.local/state/murphy/ds.ledger.json`; `ds unlock` puts
+back exactly what was there.
+
+What it can't stop: a script you hand to an interpreter yourself, anything run
+with sudo/as admin, a file you copy out and start, a game you add to
+Steam/Lutris by hand (Proton brings its own Wine), and a kernel exploit that
+escapes any sandbox. A bootkit needs root — Secure Boot is the answer there, and
+`ds status` tells you if it's off.
 
 ## Narrative Overview (`murphy overview`)
 A plain-language read of what the machine is doing *right now* — memory (with a
