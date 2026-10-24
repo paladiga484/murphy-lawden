@@ -10,7 +10,6 @@ from __future__ import annotations
 import glob
 import os
 import re
-from pathlib import Path
 from typing import Iterable
 
 from .core import Finding, Host, Severity, Status, check, have, read, run, sysctl

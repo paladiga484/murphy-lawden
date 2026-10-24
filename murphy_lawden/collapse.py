@@ -38,11 +38,10 @@ from __future__ import annotations
 import os
 import signal
 import sys
-import time
 from pathlib import Path
 
 from .core import have, run
-from .banner import Ink, make_ink, rule
+from .banner import Ink, rule
 
 # Where the reversible doors stash the state needed to walk them back.
 STATE_DIR = Path.home() / ".local/state/murphy"
@@ -80,7 +79,7 @@ def _is_root() -> bool:
 
 def _ask_phrase(ink: Ink, door: str) -> bool:
     want = PHRASES[door]
-    print(ink.amber(f"  Type the consent phrase exactly to proceed, or anything else to abort:"))
+    print(ink.amber("  Type the consent phrase exactly to proceed, or anything else to abort:"))
     print(ink.dim(f"    {want}"))
     try:
         got = input("  > ").strip()

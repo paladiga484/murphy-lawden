@@ -16,7 +16,6 @@ import os
 import shutil
 import sys
 import threading
-import time
 
 from .banner import Ink, make_ink
 

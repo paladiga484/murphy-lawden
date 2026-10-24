@@ -205,7 +205,6 @@ def _warn_unlocked(ink: Ink, folder: Path, outdir: Path) -> None:
 
 
 def cmd_extract(args, ink: Ink) -> int:
-    from . import scan
     archive = Path(args.target).expanduser().resolve()
     if not archive.is_file():
         print("  " + ink.blood(f"{archive} is not a file"))

@@ -29,15 +29,26 @@ from __future__ import annotations
 import json
 import os
 import re
+import stat
 from typing import Iterable
 
-from .core import Finding, Host, Severity, Status, read, run, sysctl
+from .core import Finding, Host, Severity, Status, run, sysctl
 from .remedy import chmod_remedy, sysctl_remedy
 from .transport import fetch
 
 
 def _is_remote(source: str) -> bool:
     return source.startswith("dns:") or bool(re.match(r"^https?://", source))
+
+
+# A remote pack is only as trustworthy as the wire it came over (plain HTTP and DNS
+# TXT can be forged in transit), so it may look but never act: no `cmd` rules and no
+# autopilot fixes. Local packs are yours. Either way a fix can only tighten.
+_SYSCTL_KEY = re.compile(r"^[a-z0-9_]+(\.[a-z0-9_-]+)+$")
+_SYSCTL_VALUE = re.compile(r"^[A-Za-z0-9_ .:,-]*$")
+# writable sysctls that name a program the kernel runs as root, or reroute one
+_SYSCTL_NEVER = ("kernel.core_pattern", "kernel.modprobe", "kernel.usermodehelper",
+                 "kernel.hotplug", "kernel.poweroff_cmd", "fs.binfmt_misc", "kernel.core_pipe_limit")
 
 
 def _remedy_for(rule: dict):
@@ -49,7 +60,7 @@ def _remedy_for(rule: dict):
       "risk": "low|medium|high"  → gate it behind a risk budget (default low)
     Only sysctl and file_mode kinds are mechanically safe to auto-apply; path_exists
     (removing a package) and cmd stay advisory."""
-    if rule.get("no_autofix"):
+    if rule.get("no_autofix") or rule.get("_remote"):
         return None
     kind = rule.get("kind")
     if kind == "sysctl":
@@ -60,13 +71,28 @@ def _remedy_for(rule: dict):
             # target to write, so order packs with the safe/preferred value first.
             val = (expect[0] if isinstance(expect, list) and expect
                    else None if isinstance(expect, list) else expect)
-        if val is None:
+        key = str(rule.get("key", ""))
+        if val is None or not _SYSCTL_KEY.match(key) or not _SYSCTL_VALUE.match(str(val)) \
+                or key.startswith(_SYSCTL_NEVER):
             return None
-        r = sysctl_remedy(rule["key"], str(val))
+        r = sysctl_remedy(key, str(val))
         r.risk = rule.get("risk", r.risk)
         return r
     if kind == "file_mode":
-        r = chmod_remedy(rule["path"], str(rule.get("max_mode", "644")))
+        # only ever take permission bits away: the target is the current mode minus
+        # whatever max_mode doesn't allow, never max_mode itself (which could add bits)
+        try:
+            st = os.lstat(rule["path"])
+            maxmode = int(str(rule.get("max_mode", "644")), 8)
+        except (OSError, ValueError):
+            return None
+        if stat.S_ISLNK(st.st_mode):
+            return None                          # chmod would follow it somewhere else
+        cur = st.st_mode & 0o7777
+        new = cur & ~(~maxmode & 0o777)
+        if new == cur:
+            return None
+        r = chmod_remedy(rule["path"], format(new, "o"))
         r.risk = rule.get("risk", r.risk)
         return r
     return None
@@ -85,8 +111,12 @@ def load_pack(source: str, transport: str = "direct") -> list[dict]:
     data = json.loads(raw)
     if isinstance(data, dict) and "rules" in data:
         data = data["rules"]
-    if not isinstance(data, list):
+    if not isinstance(data, list) or not all(isinstance(r, dict) for r in data):
         raise ValueError("pack must be a JSON list of rules (or {\"rules\": [...]})")
+    if _is_remote(source):
+        data = [{**r, "_remote": True} for r in data]
+    else:
+        data = [{k: v for k, v in r.items() if k != "_remote"} for r in data]
     return data
 
 
@@ -169,6 +199,8 @@ def _eval(rule: dict) -> Finding:
                         f"exists={exists} expected={should}")
 
     if kind == "cmd":
+        if rule.get("_remote"):
+            return _finding(rule, Status.SKIP, "command rules only run from a local pack")
         rc, out = run(list(rule["cmd"]))
         if rc == -1:
             return _finding(rule, Status.SKIP, "command unavailable")

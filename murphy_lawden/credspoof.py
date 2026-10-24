@@ -27,9 +27,7 @@ from __future__ import annotations
 
 import json
 import os
-import random
 import secrets
-import time
 from pathlib import Path
 
 from .core import have, run
@@ -88,8 +86,8 @@ def _current_mac(iface: str) -> str:
 def _random_mac() -> str:
     """A locally-administered, unicast MAC: set bit 1 of the first octet, clear
     bit 0. Looks like any randomised client address — nothing that screams 'fake'."""
-    first = (random.randint(0x00, 0xFF) & 0xFE) | 0x02
-    rest = [random.randint(0x00, 0xFF) for _ in range(5)]
+    first = (secrets.randbelow(256) & 0xFE) | 0x02
+    rest = [secrets.randbelow(256) for _ in range(5)]
     return ":".join(f"{b:02x}" for b in [first] + rest)
 
 
@@ -158,7 +156,7 @@ def spoof_machine_id(ink: Ink, apply: bool) -> int:
 def spoof_hostname(ink: Ink, apply: bool, name: str | None) -> int:
     print(rule(ink, "HOSTNAME"))
     cur = os.uname().nodename
-    new = name or random.choice(_NEUTRAL_NAMES)
+    new = name or secrets.choice(_NEUTRAL_NAMES)
     print(f"    {ink.dim(cur)}  →  {ink.bone(new)}")
     if not apply:
         return 0

@@ -333,7 +333,6 @@ def _relay(cmd: list[str]) -> int:
     import fcntl
     import select
     import signal
-    import struct
     import termios
     import tty
 

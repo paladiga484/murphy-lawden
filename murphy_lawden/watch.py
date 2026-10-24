@@ -204,7 +204,7 @@ WantedBy=default.target
     print(ink.cyan("    systemctl --user daemon-reload"))
     print(ink.cyan(f"    systemctl --user enable --now {SERVICE_NAME}"))
     print(ink.dim(f"  Watch it:   journalctl --user -u {SERVICE_NAME} -f"))
-    print(ink.dim(f"  Remove it:  murphy watch --uninstall-service"))
+    print(ink.dim("  Remove it:  murphy watch --uninstall-service"))
     return 0
 
 

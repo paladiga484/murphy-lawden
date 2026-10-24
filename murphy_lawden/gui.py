@@ -146,9 +146,21 @@ class _Handler(BaseHTTPRequestHandler):
         self._send(code, json.dumps(obj).encode("utf-8"), "application/json")
 
     def _authed(self) -> bool:
-        return self.headers.get("X-Murphy-Token") == _TOKEN
+        return secrets.compare_digest(self.headers.get("X-Murphy-Token") or "", _TOKEN)
+
+    def _local(self) -> bool:
+        """Only a page addressed to this server by its loopback name. A web page can
+        point its own domain at 127.0.0.1 (DNS rebinding) and would otherwise be
+        served the token along with the page; its requests still say its own Host."""
+        port = self.server.server_address[1]
+        if self.headers.get("Host") in (f"127.0.0.1:{port}", f"localhost:{port}"):
+            return True
+        self._send(403, b"forbidden", "text/plain")
+        return False
 
     def do_GET(self):
+        if not self._local():
+            return
         if self.path in ("/", "/index.html"):
             self._send(200, _PAGE.replace("__TOKEN__", _TOKEN).encode("utf-8"),
                        "text/html; charset=utf-8")
@@ -171,6 +183,8 @@ class _Handler(BaseHTTPRequestHandler):
             self._send(404, b"not found", "text/plain")
 
     def do_POST(self):
+        if not self._local():
+            return
         if not self._authed():
             self._json({"error": "bad or missing session token"}, 403)
             return
@@ -199,7 +213,7 @@ def serve(port: int = 8787, open_browser: bool = True, ink=None) -> int:
     ink = ink or make_ink(None)
     httpd = ThreadingHTTPServer(("127.0.0.1", port), _Handler)
     url = f"http://127.0.0.1:{port}/"
-    print(ink.green(f"  Murphy's parlour is open at ") + ink.cyan(url))
+    print(ink.green("  Murphy's parlour is open at ") + ink.cyan(url))
     print(ink.dim("  loopback only · session-token gated · Ctrl-C to close up shop"))
     if hasattr(os, "geteuid") and os.geteuid() != 0:
         print(ink.dim("  (running unprivileged — the Fixer can still plan every job and "

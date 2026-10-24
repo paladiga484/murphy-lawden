@@ -639,7 +639,7 @@ def do_fix(host, findings: list[Finding], args, ink: Ink) -> int:
     if not args.dry_run and fixer.rp and fixer.rp.journal:
         print()
         print("  " + ink.green(f"Applied {done} fix(es). ")
-              + ink.dim(f"Restore point saved — roll back anytime with: murphy undo"))
+              + ink.dim("Restore point saved — roll back anytime with: murphy undo"))
     return 0
 
 

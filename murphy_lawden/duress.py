@@ -38,7 +38,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .core import detect_host, have, run
+from .core import detect_host, run
 
 CONSENT_WIPE = "YESICONSENTTODELETEEVERYTHING"
 CONSENT_RELOCK = "YESICONSENTTOBRICKANDRELOCK"
