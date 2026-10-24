@@ -13,6 +13,15 @@ places (/tmp, the cage's home, the prefix, the output folder) can hold files but
 can never run them. Windows code itself is loaded by Wine with mmap, not execve,
 so games are unaffected.
 
+It also scopes the program (Landlock ABI 6, Linux 6.12+): it can't connect to an
+abstract unix socket that something outside the cage opened — the X server's
+`@/tmp/.X11-unix/X0` is one, and the qBittorrent jail shares the host network,
+where those live — and it can't signal a process outside.
+
+This is a lock on the easy path, not a wall: code already running can map a file
+into memory and jump to it, or hand a script to /usr/bin/sh. The walls are the
+namespaces, the system-call filter and what is (not) mounted.
+
 The restriction is permanent for the process and everything it starts. On a
 kernel without Landlock the launcher says so and carries on — the rest of the
 cage still stands.
@@ -27,10 +36,13 @@ dirs, argv = sys.argv[1:i], sys.argv[i + 1:]
 libc = ctypes.CDLL(None, use_errno=True)
 libc.syscall.restype = ctypes.c_long
 EXECUTE = 1                                            # LANDLOCK_ACCESS_FS_EXECUTE
+SCOPED = 3                                             # abstract unix sockets | signals (ABI 6)
 def fail(why):
     sys.stderr.write("cage: landlock unavailable (%s) - starting without the exec lock\n" % why)
-attr = ctypes.create_string_buffer(struct.pack("<Q", EXECUTE))
-fd = libc.syscall(444, attr, ctypes.c_size_t(8), ctypes.c_uint32(0))   # landlock_create_ruleset
+abi = libc.syscall(444, None, ctypes.c_size_t(0), ctypes.c_uint32(1))   # LANDLOCK_CREATE_RULESET_VERSION
+raw = struct.pack("<QQQ", EXECUTE, 0, SCOPED) if abi >= 6 else struct.pack("<Q", EXECUTE)
+attr = ctypes.create_string_buffer(raw, len(raw))
+fd = libc.syscall(444, attr, ctypes.c_size_t(len(raw)), ctypes.c_uint32(0))   # landlock_create_ruleset
 if fd < 0:
     fail(os.strerror(ctypes.get_errno()))
 else:

@@ -229,7 +229,7 @@ def cmd_extract(args, ink: Ink) -> int:
         out("+", f"extracting in the cage (no network, no home) → {outdir}")
         cmd = cage.build(["7z", "x", "-o/cage/out", "--", f"/cage/in/{archive.name}"],
                          binds_ro=[(str(archive), f"/cage/in/{archive.name}")],
-                         binds_rw=[(str(outdir), "/cage/out")], chdir="/cage/out")
+                         binds_rw=[(str(outdir), "/cage/out")], chdir="/cage/out", sockets=False)
         rc = cage.spawn(cmd)
     print()
     if rc != 0:
@@ -286,9 +286,33 @@ def tempfile_dir() -> str:
     return tempfile.gettempdir()
 
 
+def _changes_dir(args, src: Path) -> Path:
+    """Where a game's copy-on-write layer lives: in the locked folder, but never inside
+    the folder it covers (overlayfs refuses that)."""
+    import hashlib
+    folder, src = _folder(args).resolve(), src.resolve()
+    base = folder if folder in src.parents else src.parent
+    return base / ".cage-changes" / f"{src.name}-{hashlib.sha256(str(src).encode()).hexdigest()[:8]}"
+
+
+def _alarm(out, title: str, lines: list[str]) -> None:
+    """Say it in the terminal and as a desktop notification: a double-clicked game has
+    no terminal anyone reads."""
+    from .autoscan import _notify
+    for line in lines[:12]:
+        out("!", names.safe(line))
+    _notify(f"Murphy: {title}", "\n".join(names.safe(line) for line in lines[:5]), "critical")
+
+
 def cmd_run(args, ink: Ink) -> int:
     from . import scan
-    target = Path(args.target).expanduser().resolve()
+    given = Path(args.target).expanduser()
+    target = given.resolve()
+    if given.is_symlink() or any(p.is_symlink() for p in given.absolute().parents
+                                 if _folder(args) in p.parents):
+        # a torrent can carry symlinks; the cage must get the file, not where a link points
+        print("  " + ink.blood(f"{names.safe(str(given))} is (or sits under) a symlink — refused"))
+        return 2
     if not target.is_file():
         from . import guide
         guide.explain_run(target, _folder(args), ink)
@@ -371,7 +395,7 @@ def cmd_run(args, ink: Ink) -> int:
         return 2
     outdir.mkdir(parents=True, exist_ok=True)
     binds = [(str(src_dir), "/cage/app")] if src_dir else [(str(target), inner)]
-    binds_rw, extra_env = [(str(outdir), "/cage/out")], None
+    binds_rw, extra_env, overlays = [(str(outdir), "/cage/out")], None, []
     if args.writable and not (prefix and prefix in target.parents):   # a prefix already is
         if not args.with_dir or work:
             out("x", "--writable needs --with-dir, and can't apply to a Linux program (it runs "
@@ -379,13 +403,33 @@ def cmd_run(args, ink: Ink) -> int:
             if work:
                 cage.unstage(work)
             return 2
-        binds, binds_rw = [], binds_rw + [(str(src_dir), "/cage/app")]
-        out("!", f"its own folder is writable: it can save there — and change or delete "
-                 f"anything in {src_dir}")
+        if cage.overlay_ok():
+            changes = _changes_dir(args, src_dir)
+            for d in ("upper", "work"):
+                (changes / d).mkdir(parents=True, exist_ok=True)
+            binds, overlays = [], [(str(src_dir), str(changes / "upper"), str(changes / "work"), "/cage/app")]
+            out("+", f"its folder is copy-on-write: saves and changes land in {changes / 'upper'}; "
+                     "the download itself can't be changed or deleted")
+        else:
+            binds, binds_rw = [], binds_rw + [(str(src_dir), "/cage/app")]
+            out("!", f"its own folder is writable: it can save there — and change or delete "
+                     f"anything in {src_dir}")
     chdir = "/cage/app" if src_dir else "/cage/out"
     if build:
         from . import proton
         fresh = proton.prepare(prefix)
+        grown = [] if fresh else proton.new_autostarts(prefix, build)
+        if grown and not args.accept_autostart:
+            _alarm(out, "a caged game's prefix starts things by itself",
+                   ["its prefix now starts these on its own (inside the cage, every launch):",
+                    *grown, f"not yours? delete {prefix}. Yours (an installer's)? run again with "
+                    "--accept-autostart"])
+            if work:
+                cage.unstage(work)
+            return 3
+        if grown:
+            proton.accept_autostarts(prefix, grown)
+            out("!", f"accepted {len(grown)} autostart entr{'y' if len(grown) == 1 else 'ies'} in its prefix")
         if prefix in target.parents:               # it lives in the prefix; nothing else to mount
             inner, binds = f"{proton.INNER_PREFIX}/{target.relative_to(prefix)}", []
             chdir = os.path.dirname(inner)
@@ -395,14 +439,14 @@ def cmd_run(args, ink: Ink) -> int:
         extra_env = proton.env(wayland=args.gui)
         out("+", f"{build.name} · " + ("new prefix" if fresh else "its prefix from last time")
             + f" (kept): {prefix}")
-        if not (args.gui and args.gpu):
+        if not (args.gui and (args.gpu or args.dgpu)):
             out("!", "a game wants a window and the GPU: add --gui --gpu")
     from contextlib import ExitStack
     from . import wlsec
     with ExitStack() as stack:
         if work:
             stack.callback(cage.unstage, work)
-        wl = None
+        wl = filt = None
         if args.gui:
             try:
                 wl = stack.enter_context(wlsec.RestrictedSocket())
@@ -415,6 +459,8 @@ def cmd_run(args, ink: Ink) -> int:
                 print("  " + ink.blood("--gui refused: the compositor still offers "
                                        + ", ".join(sorted(leaked)) + " to sandboxed clients."))
                 return 2
+            filt = wlsec.FilteredSocket(wl, wlsec.WINDOW_GLOBALS)   # no clipboard, no focus stealing
+            wl = stack.enter_context(filt)
         snd = None
         if args.audio:
             from . import audio
@@ -433,16 +479,28 @@ def cmd_run(args, ink: Ink) -> int:
                 import uuid
                 idf.write_text(uuid.uuid4().hex + "\n")
             mid = idf.read_text().strip()
+        gpu = args.gpu or args.dgpu
         cmd = cage.build(argv, binds_ro=binds, binds_rw=binds_rw, extra_env=extra_env,
-                         wayland=wl, gpu=args.gpu, chdir=chdir, pulse=snd, machine_id=mid,
-                         exec_app=not args.writable)
+                         wayland=wl, gpu=gpu, dgpu=args.dgpu, chdir=chdir, pulse=snd,
+                         machine_id=mid, exec_app=not args.writable, overlays=overlays)
+        gpus = ", ".join(d for _, d, _ in cage.pick_gpus(args.dgpu)) if gpu else ""
         out("+", "cage up: no network · empty home · read-only OS · writes only to " + str(outdir)
-            + (" · restricted Wayland window" if wl else " · no display")
-            + (" · GPU" if args.gpu else "") + (" · play-only sound" if snd else "")
+            + (" · filtered Wayland window (no clipboard)" if wl else " · no display")
+            + (f" · GPU: {gpus or 'none found'}" if gpu else "") + (" · play-only sound" if snd else "")
             + (" · syscall filter" if cage.seccomp.supported() else "")
             + " · Ctrl-C closes it")
         rc = cage.spawn(cmd, memory=args.memory)
+    if filt and filt.refused:
+        _alarm(out, "a caged program reached for hidden interfaces",
+               ["it tried to use Wayland interfaces it was never shown (clipboard, focus, …):",
+                ", ".join(sorted(set(filt.refused))), "a game has no reason to — treat it as hostile"])
     if build:
+        grown = proton.new_autostarts(prefix, build)
+        if grown:
+            _alarm(out, "a caged program set itself to start again",
+                   ["while it ran, it made its prefix start these on every launch:", *grown,
+                    "the next run is refused until you accept them (--accept-autostart) or "
+                    f"delete {prefix}"])
         out("=", f"cage closed (exit {rc}); its home and /tmp are gone, the prefix stays — "
                  f"delete {prefix} to forget the game")
     else:
@@ -520,6 +578,8 @@ def cmd_jail(args, ink: Ink) -> int:
     if args.status:
         out("=", "jail: " + jail.status())
         return 0
+    if args.tray:
+        return jail.set_tray(args.tray == "on", out)
     return jail.launch(args.qbit_args, out)
 
 
@@ -636,7 +696,11 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--gui", action="store_true",
                    help="allow a window on a restricted Wayland socket (never X11; refused if "
                         "the compositor can't withhold virtual input/screen capture)")
-    r.add_argument("--gpu", action="store_true", help="allow the GPU (more kernel attack surface)")
+    r.add_argument("--gpu", action="store_true",
+                   help="allow one GPU: the integrated one where there are two (kernel attack surface)")
+    r.add_argument("--dgpu", action="store_true",
+                   help="allow every GPU, the NVIDIA card too — for 3D games the iGPU can't carry "
+                        "(its driver is far more kernel code)")
     r.add_argument("--audio", action="store_true",
                    help="allow sound through a private play-only server: no microphone, no "
                         "capture (refused if that can't be verified)")
@@ -650,6 +714,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help="which Proton build, by part of its name (e.g. dwproton); implies --proton")
     r.add_argument("--memory", default="8G", help="memory ceiling (default 8G)")
     r.add_argument("--force", action="store_true", help="run even with a CRIT verdict")
+    r.add_argument("--accept-autostart", action="store_true",
+                   help="its Proton prefix starts things by itself (an installer's doing) and that's fine")
     r.add_argument("-y", "--yes", action="store_true", help="don't ask")
     r.add_argument("--auto", action="store_true",
                    help="pick the flags yourself: a Windows .exe gets Proton, a window, the GPU and "
@@ -672,6 +738,8 @@ def build_parser() -> argparse.ArgumentParser:
     jg.add_argument("--install", action="store_true", help="make every way of starting qBittorrent jailed")
     jg.add_argument("--uninstall", action="store_true", help="stop jailing it")
     jg.add_argument("--status", action="store_true")
+    jg.add_argument("--tray", choices=("on", "off"),
+                    help="tray icon and notifications (a filtered, sandboxed D-Bus); off by default")
     jl.add_argument("qbit_args", nargs="*", help="passed to qBittorrent (after --)")
     ip = sub.add_parser("ipfilter", help="qBittorrent never connects to hijacked/criminal/botnet networks")
     ig = ip.add_mutually_exclusive_group()

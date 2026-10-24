@@ -99,9 +99,9 @@ def av_linux(root: Path) -> tuple[list[Hit], list[str]]:
         return [], [f"ClamAV has no signatures ({st.detail}) — run `sudo freshclam`"]
     if st.age_days is not None and st.age_days > 7:
         notes.append(f"ClamAV {st.detail} — stale; `sudo freshclam` before trusting a clean result")
-    rc, out = run(["clamscan", "-r", "-i", "--no-summary", "--stdout",
-                   "--scan-archive=yes", "--alert-encrypted=yes", "--alert-macros=yes",
-                   "--max-filesize=4000M", "--max-scansize=4000M", str(root)], timeout=6 * 3600)
+    rc, out = clamav.clamscan(["-r", "-i", "--no-summary", "--stdout", "--scan-archive=yes",
+                               "--alert-encrypted=yes", "--alert-macros=yes", "--max-filesize=4000M",
+                               "--max-scansize=4000M"], [str(root)], timeout=6 * 3600)
     hits = []
     for line in out.splitlines():
         if line.rstrip().endswith("FOUND"):

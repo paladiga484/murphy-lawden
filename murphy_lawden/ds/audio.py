@@ -10,6 +10,10 @@ listens on its own socket, refuses module loading, and blocks every client from
 recording and from touching volumes. What is left is the one thing a game needs:
 it can play. Before the socket is handed over it is probed — if a module still
 loads or a recording still opens, `--audio` is refused rather than trusted.
+
+That server parses every byte the caged program sends it, so it runs boxed as
+well: its own bwrap with no network, no home and no other sockets — only the real
+PipeWire socket and the folder its own socket lives in.
 """
 from __future__ import annotations
 
@@ -21,6 +25,7 @@ import time
 from pathlib import Path
 
 from ..core import have, run
+from . import cage, seccomp
 
 _CONF = """\
 context.properties = {{ }}
@@ -90,8 +95,22 @@ class PlayOnly:
         sock = os.path.join(self.dir, "pulse")
         conf = Path(self.dir, "pulse.conf")
         conf.write_text(_CONF.format(sock=sock, pid=os.getpid()))
-        self.proc = subprocess.Popen(["pipewire-pulse", "-c", str(conf)], stdin=subprocess.DEVNULL,
-                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        cmd = ["pipewire-pulse", "-c", str(conf)]
+        rt = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
+        core = os.path.join(rt, os.environ.get("PIPEWIRE_REMOTE") or "pipewire-0")
+        if have("bwrap") and os.path.exists(core):
+            box = ["bwrap", "--unshare-all", "--unshare-user", "--disable-userns", "--die-with-parent",
+                   "--new-session", "--clearenv", *cage._root_fs(), "--proc", "/proc", "--dev", "/dev",
+                   "--tmpfs", "/tmp", "--dir", rt, "--chmod", "0700", rt, "--ro-bind", core, core,
+                   "--bind", self.dir, self.dir, "--setenv", "XDG_RUNTIME_DIR", rt,
+                   "--setenv", "HOME", "/tmp"]
+            if seccomp.supported():
+                box += ["--seccomp", str(cage._data_fd(seccomp.program()))]
+            cmd = [*box, "--", *cmd]
+        self.proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                     stderr=subprocess.DEVNULL, pass_fds=tuple(cage._FDS))
+        while cage._FDS:
+            os.close(cage._FDS.pop())
         end = time.monotonic() + 5
         while not os.path.exists(sock) and self.proc.poll() is None and time.monotonic() < end:
             time.sleep(0.05)

@@ -75,6 +75,30 @@ class ScanResult:
     raw: str
 
 
+def clamscan(opts: list[str], paths: list[str], timeout: int) -> tuple[int, str]:
+    """clamscan, inside murphy's cage whenever one can be built. The scanner parses
+    every archive, PDF and image an attacker hands it — ClamAV has had remote-code
+    bugs in exactly those parsers — so it runs with no network, no sockets at all,
+    and only the database and what it scans, read-only."""
+    try:
+        from .ds import cage
+    except ImportError:
+        cage = None
+    if cage is None or not cage.available()[0] or not os.path.isdir(DB_DIR):
+        return run(["clamscan", *opts, *paths], timeout=timeout)
+    import shutil
+    import tempfile
+    cage.SCRATCH.mkdir(parents=True, exist_ok=True)
+    tmp = tempfile.mkdtemp(prefix="scan-", dir=cage.SCRATCH)        # archives unpack here, not in RAM
+    try:
+        cmd = cage.build(["clamscan", *opts, "--tempdir=/cage/tmp", "--", *paths],
+                         binds_ro=[(DB_DIR, DB_DIR), *((p, p) for p in paths)],
+                         binds_rw=[(tmp, "/cage/tmp")], chdir="/", sockets=False)
+        return cage.capture(cmd, timeout)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def scan(targets: list[str] | None = None, timeout: int = 1800) -> ScanResult:
     """Recursively scan `targets` (default: home + scratch dirs) for known malware.
 
@@ -83,7 +107,7 @@ def scan(targets: list[str] | None = None, timeout: int = 1800) -> ScanResult:
     paths = _expand(targets or DEFAULT_TARGETS)
     if not paths:
         return ScanResult([], [], 0, "no existing targets to scan")
-    rc, out = run(["clamscan", "-r", "-i", "--no-summary", "--stdout", *paths], timeout=timeout)
+    rc, out = clamscan(["-r", "-i", "--no-summary", "--stdout"], paths, timeout)
     infected = []
     for line in out.splitlines():
         if line.rstrip().endswith("FOUND"):

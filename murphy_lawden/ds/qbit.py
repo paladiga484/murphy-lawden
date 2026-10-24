@@ -29,6 +29,9 @@ K_IFACE_NAME = "BitTorrent/Session/InterfaceName"
 K_LSD = "BitTorrent/Session/LSDEnabled"
 K_ANON = "BitTorrent/Session/AnonymousModeEnabled"
 K_UPNP = "Network/PortForwardingEnabled"
+K_SSRF = "BitTorrent/Session/SSRFMitigation"
+K_TLS = "BitTorrent/Session/ValidateHTTPSTrackerCertificate"
+K_PRIV_PORTS = "BitTorrent/Session/BlockPeersOnPrivilegedPorts"
 K_MOTW = "Preferences/Advanced/markOfTheWeb"
 K_RUN_DONE = "AutoRun/enabled"
 K_RUN_DONE_PROG = "AutoRun/program"
@@ -87,9 +90,22 @@ def _quote(v: str) -> str:
 
 
 class Ini:
+    """qBittorrent's config. Its folder is writable from inside the jail, so a
+    compromised client could swap the file for a symlink: reading through one would
+    copy whatever it points at (an SSH key) into the jail's reach, writing through
+    one would land outside it. Neither ever follows a link."""
+
     def __init__(self, path: Path):
         self.path = path
-        self.lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+        self.lines = []
+        try:
+            fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        except FileNotFoundError:
+            return
+        except OSError as e:
+            raise OSError(f"{path} is a link or unreadable - refusing to touch it ({e.strerror})") from e
+        with os.fdopen(fd, encoding="utf-8") as f:
+            self.lines = f.read().splitlines()
 
     def _find(self, key: str) -> tuple[int, int]:
         """(index of the section header or -1, index of the key line or -1)."""
@@ -167,10 +183,18 @@ class Ini:
         self.lines = keep
 
     def save(self) -> None:
+        import tempfile
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self.path.with_suffix(".murphy-tmp")
-        tmp.write_text("\n".join(self.lines) + "\n", encoding="utf-8")
-        os.replace(tmp, self.path)
+        # a fresh, exclusively created temp file (never a name planted in advance),
+        # renamed over the config: a symlink there is replaced, not followed
+        fd, tmp = tempfile.mkstemp(prefix=".murphy-", suffix=".tmp", dir=self.path.parent)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write("\n".join(self.lines) + "\n")
+            os.replace(tmp, self.path)
+        except BaseException:
+            Path(tmp).unlink(missing_ok=True)
+            raise
 
 
 def _true(v: str | None, default: bool) -> bool:
@@ -265,6 +289,15 @@ def audit(folder: Path) -> list[Hit]:
     if missing:
         hits.append(Hit(WARN, "excluded names", f"never-legit types are still downloaded: "
                                                 f"{', '.join(missing[:6])}{' …' if len(missing) > 6 else ''}"))
+    if not _true(ini.get(K_SSRF), True):
+        hits.append(Hit(HIGH, "ssrf", "SSRF mitigation off: a torrent's tracker or web-seed URL "
+                                      "can make the client poke services on this machine"))
+    if not _true(ini.get(K_TLS), True):
+        hits.append(Hit(HIGH, "tracker tls", "HTTPS tracker certificates aren't checked — anyone "
+                                             "on the path can impersonate a tracker"))
+    if not _true(ini.get(K_PRIV_PORTS), False):
+        hits.append(Hit(INFO, "privileged ports", "peers on ports below 1024 are dialled too — a "
+                                                  "swarm can be used to knock on mail/web/SSH ports"))
     if not _true(ini.get(K_APPEND), False):
         hits.append(Hit(INFO, "incomplete", "half-downloaded files keep their real extension "
                                             "(no .!qB), so a partial .exe is clickable"))
@@ -290,6 +323,9 @@ def apply_lock(folder: Path, ledger: dict, remember) -> list[str]:
     }
     want[K_LSD] = "false"
     want[K_ANON] = "true"
+    want[K_SSRF] = "true"
+    want[K_TLS] = "true"
+    want[K_PRIV_PORTS] = "true"
     vpn = vpn_interfaces()
     if len(vpn) == 1:
         want[K_IFACE] = vpn[0]

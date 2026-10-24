@@ -99,12 +99,24 @@ new session, a memory/task ceiling, no display unless `--gui` (Wayland only —
 never X11). Windows programs get a throwaway Wine prefix that dies with the run.
 A system-call filter (seccomp, built by hand — no libseccomp) makes the kernel refuse
 what exploits use and games don't: BPF, io_uring, perf, userfaultfd, keyrings, mounts,
-module/kexec loading, raw I/O ports — for both 64-bit and 32-bit x86 calls. The cage
-also gets a made-up `/etc/machine-id` (stable per kept prefix) and hostname, and with
-`--gpu` the disk serials, network cards, firmware and DMI tables are hidden from `/sys`. Landlock
-allows starting programs only from the read-only system, Proton and the program's own
-copy — a native Linux payload dropped by a Windows .exe into /tmp, its prefix or the
-output folder can be written but never run.
+module/kexec loading, raw I/O ports, SysV message queues — for both 64-bit and 32-bit
+x86 calls — and lets sockets through only for unix, IPv4/6 and route/uevent netlink
+(no AF_ALG, packet, vsock, TIPC… and no module auto-loading for them). The cage also
+gets a made-up `/etc/machine-id` (stable per kept prefix) and hostname, a `passwd` that
+knows only "cage", an `/etc` without SSH host keys, disk UUIDs or boot/kernel/firewall
+settings, and a `/proc` without the kernel command line, module list or partitions.
+`--gpu` gives one GPU — the integrated one where there are two; `--dgpu` adds the
+NVIDIA card and its much larger driver — as a render node only, with a `/sys` that
+holds just that GPU's folder (serials, MACs, EDIDs blanked) and the CPU topology
+(not the list of unmitigated CPU bugs). `--gui` windows go through murphy's own
+Wayland filter on top of the compositor's sandbox socket: no clipboard (a Windows
+"clipper" can't read what you copy or swap in its wallet address), no focus
+stealing, shortcut grabs or idle watching; a program that reaches for a hidden
+interface anyway is cut off and named. Landlock allows starting programs only from
+the read-only system, Proton and the program's own copy — a native Linux payload
+dropped by a Windows .exe into /tmp, its prefix or the output folder can be written
+but not started by name — and keeps the program off abstract sockets and signals
+outside the cage.
 
 **Games (`--proton`):** `murphy ds run setup.exe --with-dir --proton --gui --gpu`
 runs it under a Proton build Steam already has (newest GE-Proton; `--proton-build
@@ -112,17 +124,38 @@ dwproton` picks another), mounted read-only, in the same cage. The prefix is *ke
 in `<output folder>/prefix` — installs, saves, shader cache — so point `ds run` at
 the installed `…/prefix/pfx/drive_c/…/game.exe` next time and it reuses it. Delete
 the output folder to forget the game. No controllers (no `/dev/input`), no
-Steam, and nothing that needs to phone home.
+Steam, and nothing that needs to phone home. A kept prefix is a place to persist —
+Wine honours Run/RunOnce keys, the Startup folder, auto-start services, scheduled
+tasks — so after every run the prefix is compared with the Proton build's own
+template, and a prefix that grew an autostart is refused next time (with a desktop
+notification) until you `--accept-autostart` it or delete it.
 
 **Sound (`--audio`):** the desktop's audio socket lets a client record the
 microphone, capture other programs and load server modules, so the cage never
 gets it. `--audio` starts a private pipewire-pulse for the run — module loading
 off, recording and volume changes blocked for every client — and probes it before
 handing it over; if a module still loads or a recording still opens, it refuses.
+That server parses everything the program sends, so it runs in a bwrap of its own
+(no network, no home, only the PipeWire socket).
 
-**Saves beside the .exe (`--writable`):** with `--with-dir` the game's folder is
-mounted writable instead of read-only, for games that save into their own folder
-(RPG Maker, most old games). It can then also change or delete its own files.
+**Saves beside the .exe (`--writable`):** with `--with-dir` the game's folder gets a
+copy-on-write layer, for games that save into their own folder (RPG Maker, most old
+games): everything it writes lands in `<torrent folder>/.cage-changes/<game>-<id>/upper`,
+and the download underneath can't be changed or deleted. Where overlayfs isn't
+available it falls back to mounting the folder writable.
+
+**Scanning:** ClamAV parses every archive, PDF and image an attacker hands it, so
+`clamscan` runs in the cage too — no network, no sockets at all, only its database
+and what it scans, read-only. The extractor (7z) gets the same no-sockets filter.
+
+**The jail (`ds jail`):** qBittorrent runs in a bwrap that sees only the torrent
+folder, its own config/data/cache and your theme; a user namespace that can't make
+more; the masked `/etc` and `/proc`; no GPU, no `/sys`; none of your session's
+environment beyond locale and theme; Landlock scoping off the host's abstract
+sockets (it has to share the network — Xwayland's socket lives there); a filtered
+Wayland socket that keeps the clipboard (magnet links) but nothing privileged; and
+no D-Bus at all unless `ds jail --tray on`, which adds a filtered xdg-dbus-proxy
+that itself runs boxed.
 
 **lock** (Linux): `~/Torrents` bind-mounted `noexec,nosuid,nodev`; Wine's binfmt
 handler off; a `~/.local/bin/wine` shim that sends `wine <file in the folder>`
